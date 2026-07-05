@@ -1,0 +1,60 @@
+[project]
+name = "ibex-agent"
+version = "0.1.0"
+description = "Ibex —— 开源、可自部署、多模型路由、多渠道接入的Dev 场景 Agent 工程框架"
+requires-python = ">=3.11"
+
+# 版本说明：用 ">=" 下限，uv 自动解析到当前最新可用版本。
+# 经核对 LangChain 官方 changelog 与 PyPI（2026-05 线）：
+#   deepagents → 0.6 线   langgraph → 1.1 线   langchain → 1.x 线
+#   langgraph-checkpoint-postgres → 3.0.x   langgraph-checkpoint-redis → 0.4.x
+# API 随版本演进，动手前请以官方 changelog 与 PyPI 实测为准。
+dependencies = [
+    # ===== Agent 核心 =====
+    "deepagents>=0.6.0",                  # Harness 层（本项目主角）
+    "langchain>=1.1.0",                   # 构建模块（init_chat_model / 模型 profiles）
+    "langgraph>=1.1.0",                   # 编排运行时（checkpointer / streaming / HITL）
+    "langchain-openai>=0.3.0",            # 模型集成包（国产模型走 OpenAI 兼容接口）
+    # ===== 持久化底座 + 异步驱动栈=====
+    "langgraph-checkpoint-postgres>=3.0.0",  # PostgresSaver / AsyncPostgresSaver + store
+    "psycopg[binary,pool]>=3.2.0",           # Postgres 驱动（psycopg3）+ 异步连接池
+    "redis>=5.0.0",                          # Redis 客户端，自带 redis.asyncio 异步接口
+    # ===== Web 服务=====
+    "fastapi>=0.115.0",                   # 异步 Web 框架
+    "uvicorn[standard]>=0.30.0",          # ASGI 服务器
+    # ===== 配置与日志 =====
+    "loguru>=0.7.0",
+    "pydantic-settings>=2.0.0",           # 配置体系（见第 4.3 节）
+    "python-dotenv>=1.0.0",               # 加载 .env
+    "daytona>=0.189.0",
+    "langchain-daytona>=0.0.7",
+    "langchain-mcp-adapters>=0.3.0",
+    "lark-oapi>=1.6.8",
+    "arq>=0.28.0",
+    "slowapi>=0.1.10",
+    "prometheus-client>=0.25.0",
+    "locust>=2.44.4",
+    "gunicorn>=26.0.0",
+]
+
+[project.optional-dependencies]
+# MCP
+mcp = ["langchain-mcp-adapters>=0.1.0"]
+# 沙箱：基础接入 / 沙箱池（届时 uv sync --extra sandbox 再装）
+sandbox = ["langchain-modal>=0.0.1"]
+# Redis 作为 checkpointer/store（可选，需 Redis Stack）
+redis-graph = ["langgraph-checkpoint-redis>=0.4.0"]
+# 独立向量库（PostgresStore 已含 pgvector，独立 RAG 时才需要）
+vectorstore = ["langchain-postgres>=0.0.12"]
+# 任务队列 + 限流（后台长任务 / 并发治理）：第 10、11 章
+serving = ["arq>=0.26.0", "slowapi>=0.1.9", "sse-starlette>=2.1.0"]
+# 多副本部署
+deploy = ["gunicorn>=22.0.0"]
+# 可观测 + 压测
+obs = ["langsmith>=0.3.0", "prometheus-client>=0.20.0", "locust>=2.29.0"]
+
+[tool.uv]
+# Ibex 是应用项目（不发布到 PyPI），不需要把自己打成包。
+# 设为非包项目：uv sync 只装依赖、不构建本项目本身。
+# 否则 uv 会尝试用 hatchling 构建本项目，但因没有与项目同名的 ibex_claw/ 目录而报错。
+package = false
