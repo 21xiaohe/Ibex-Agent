@@ -1,0 +1,14 @@
+# deploy/prometheus.yml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'ibex-web'
+    static_configs:
+      - targets: ['web:8000']        # compose 服务名 web
+    metrics_path: /metrics
+
+  - job_name: 'ibex-worker'       # 抓 worker 指标
+    static_configs:
+      - targets: ['worker:8002']     # compose 服务名 worker，端口 8002（避开 Redis Insight 占用的 8001）
+    metrics_path: /metrics
