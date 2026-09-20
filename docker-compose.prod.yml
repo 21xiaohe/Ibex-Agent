@@ -1,0 +1,63 @@
+# docker-compose.prod.yml —— 生产编排（web + worker + 飞书 + pg + redis + prometheus + grafana）
+services:
+  web:                              # web 服务（Gunicorn 多 worker）
+    build: .
+    # 端口映射用小众端口：宿主机 18700 → 容器内 8000。
+    # 只改宿主机这一侧（左边），容器内仍是 8000（代码 bind 的、容器间访问的都不变）。
+    # 用 18700 这种非常见端口，能躲开公网对 8000/80/443 的批量扫描骚扰。
+    ports: ["18700:8000"]
+    env_file: .env
+    depends_on: [postgres, redis]
+    restart: unless-stopped
+    # 用 Dockerfile 默认 CMD（bash scripts/start_web.sh）
+
+  worker:                           # arq 任务 worker（独立进程，可多开）
+    build: .                        # 同一个镜像
+    command: ["arq", "tasks.worker.WorkerSettings"]   # pip 装在系统环境，直接用 arq（不是 uv run arq）
+    env_file: .env
+    depends_on: [postgres, redis]
+    restart: unless-stopped
+    # 教学用单 worker，不写 replicas（多副本指标抓取有坑，见 §2.5 提醒）
+
+  feishu:                           # 飞书长连接接收端（如启用飞书渠道）
+    build: .
+    command: ["python", "-m", "channels.feishu_ws"]   # 同上，直接用 python（不是 uv run python）
+    env_file: .env
+    depends_on: [postgres, redis]
+    restart: unless-stopped
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ibex                  # 和 .env 里 IBEX_DATABASE_URL 的用户名一致
+      POSTGRES_PASSWORD: ${IBEX_PG_PASSWORD}
+      POSTGRES_DB: ibex
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    restart: unless-stopped
+
+  redis:
+    image: redis/redis-stack:latest
+    volumes: ["redisdata:/data"]
+    restart: unless-stopped
+
+  prometheus:                       # 抓取指标
+    image: prom/prometheus:latest
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml
+    # 监控后台只绑本机回环 127.0.0.1，公网根本访问不到（比换端口更安全）。
+    # 宿主机 127.0.0.1:19090 → 容器内 9090。要看 Prometheus 就 SSH 到服务器、走隧道访问（见 §2 提醒）。
+    ports: ["127.0.0.1:19090:9090"]
+    restart: unless-stopped
+
+  grafana:                          # 可视化看板
+    image: grafana/grafana:latest
+    # 同上：Grafana 也只绑本机回环，公网进不来。宿主机 127.0.0.1:13000 → 容器内 3000。
+    ports: ["127.0.0.1:13000:3000"]
+    volumes: ["grafanadata:/var/lib/grafana"]
+    depends_on: [prometheus]
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  grafanadata:
