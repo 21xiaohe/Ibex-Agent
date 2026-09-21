@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ibex · Dev Agent</title>
+<style>
+  :root {
+    --bg:          #faf9f6;
+    --surface:     #ffffff;
+    --surface-2:   #f4f3ee;
+    --line:        #e6e4dc;
+    --ink:         #2d312e;
+    --ink-soft:    #737774;
+    --accent:      #5c8d76;
+    --accent-light:#e2ede6;
+    --accent-ink:  #2f5240;
+    --blue-light:  #e3f0f8;
+    --blue-ink:    #244b63;
+    --pink-light:  #fbf0ec;
+    --radius:      16px;
+    --radius-sm:   10px;
+    --shadow:      0 2px 8px rgba(45,49,46,0.03), 0 10px 30px rgba(45,49,46,0.05);
+    --transition:  all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    /* 代码块配色（柔和浅色） */
+    --code-bg:     #f6f8f6;
+    --code-line:   #e2e8e3;
+    --code-ink:    #38463d;
+    --code-head:   #eef2ee;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{height:100%; margin:0;}
+  body{
+    background:
+      radial-gradient(1000px 500px at 80% -10%, #edf4f0 0%, transparent 70%),
+      radial-gradient(800px 500px at 10% 30%, #f6f0ec 0%, transparent 60%),
+      radial-gradient(700px 400px at 50% 90%, #ebf3f7 0%, transparent 70%),
+      var(--bg);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;
+    display:flex; flex-direction:column; height:100dvh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- 顶栏 ---------- */
+  header{
+    display:flex; align-items:center; gap:14px;
+    padding:14px 24px;
+    background:rgba(255,255,255,0.75);
+    backdrop-filter:saturate(1.5) blur(12px);
+    border-bottom:1px solid var(--line);
+    flex-shrink:0; z-index: 10;
+  }
+  .mark{
+    width:38px; height:38px; flex-shrink:0;
+    display:grid; place-items:center;
+    background:linear-gradient(135deg, #6b9c83, #46705a);
+    border-radius:12px; box-shadow:0 4px 14px rgba(92,141,118,0.25);
+  }
+  .mark svg{width:22px; height:22px;}
+  .brand{display:flex; flex-direction:column; line-height:1.25;}
+  .brand .name{font-weight:700; font-size:16px; letter-spacing:.3px;}
+  .brand .name b{color:var(--accent-ink); font-weight:700;}
+  .brand .sub{font-size:12px; color:var(--ink-soft);}
+  .status{
+    margin-left:auto; display:flex; align-items:center; gap:8px;
+    font-size:12px; color:var(--ink-soft);
+    padding:6px 14px; background:var(--surface-2);
+    border:1px solid var(--line); border-radius:999px; font-weight: 500;
+  }
+  .dot{width:8px; height:8px; border-radius:50%; background:#bcbfb8; transition:var(--transition);}
+  .dot.on{background:var(--accent); box-shadow:0 0 0 4px rgba(92,141,118,0.2);}
+
+  /* ---------- 服务器配置面板 ---------- */
+  .config-panel {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 10px 24px;
+    background: rgba(254, 253, 250, 0.6);
+    border-bottom: 1px solid var(--line);
+    backdrop-filter: blur(8px); font-size: 13px;
+  }
+  .config-title { color: var(--ink-soft); font-weight: 500; display: flex; align-items: center; gap: 4px; }
+  .server-input-wrapper { display: flex; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 2px 8px; flex: 1; max-width: 320px; transition: var(--transition); }
+  .server-input-wrapper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(92,141,118,0.1); }
+  .server-input-wrapper input { width: 100%; border: none; outline: none; padding: 4px 2px; font-size: 13px; color: var(--ink); font-family: monospace; }
+  .server-presets { display: flex; gap: 6px; }
+  .preset-btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft); padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: var(--transition); }
+  .preset-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+  .preset-btn.active { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-light); font-weight: 500; }
+
+  /* ---------- 对话区 ---------- */
+  main{flex:1; overflow-y:auto; padding:20px 0;}
+  .thread{max-width:800px; margin:0 auto; padding:0 24px; display:flex; flex-direction:column; gap:20px;}
+  .msg{display:flex; gap:14px; align-items:flex-start; animation:rise .4s cubic-bezier(0.16, 1, 0.3, 1);}
+  @keyframes rise{from{opacity:0; transform:translateY(12px);} to{opacity:1; transform:none;}}
+  .msg .av{
+    width:32px; height:32px; border-radius:10px; flex-shrink:0;
+    display:grid; place-items:center; font-size:12px; font-weight:700;
+  }
+  .msg.bot .av{background:linear-gradient(135deg,#6b9c83,#46705a); box-shadow: 0 2px 6px rgba(92,141,118,0.15);}
+  .msg.bot .av svg{width:18px;height:18px;}
+  .msg.user .av{background:var(--blue-light); border:1px solid #cbe0ee; color:var(--blue-ink);}
+  .bubble{
+    padding:14px 18px; border-radius:16px; font-size:14.5px; line-height:1.65;
+    max-width:calc(100% - 60px); word-wrap:break-word;
+    box-shadow: var(--shadow); transition: var(--transition);
+    overflow-wrap:break-word;
+  }
+  .msg.bot .bubble{
+    background:var(--surface); border:1px solid var(--line);
+    border-top-left-radius:4px; color:var(--ink);
+  }
+  .msg.user{flex-direction:row-reverse;}
+  .msg.user .bubble{
+    background:var(--accent-light); border:1px solid #cbdccf;
+    border-top-right-radius:4px; color:var(--accent-ink);
+  }
+  /* 气泡内普通文字段：保留换行 */
+  .bubble .seg{white-space:pre-wrap;}
+  /* 行内代码 */
+  .bubble code.inline{
+    background:rgba(45,49,46,0.06); padding:2px 6px; border-radius:6px;
+    font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px;
+    color:#b34a36; font-weight: 500;
+  }
+  .msg.user .bubble code.inline { background: rgba(255,255,255,0.5); color: var(--accent-ink); }
+  /* ===== 多行代码块 ===== */
+  .codeblock{
+    margin:10px 0; border:1px solid var(--code-line); border-radius:12px;
+    overflow:hidden; background:var(--code-bg);
+    box-shadow: 0 1px 2px rgba(45,49,46,0.03);
+  }
+  .codeblock .cb-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:7px 12px; background:var(--code-head);
+    border-bottom:1px solid var(--code-line);
+    font-size:11.5px; color:var(--ink-soft); letter-spacing:.3px;
+  }
+  .codeblock .cb-lang{
+    font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:600;
+    text-transform:uppercase; letter-spacing:.5px;
+  }
+  .codeblock .cb-dots{display:flex; gap:5px;}
+  .codeblock .cb-dots i{width:8px;height:8px;border-radius:50%;display:block;}
+  .codeblock .cb-dots i:nth-child(1){background:#e6b3aa;}
+  .codeblock .cb-dots i:nth-child(2){background:#e8d4a8;}
+  .codeblock .cb-dots i:nth-child(3){background:#a9cdb4;}
+  .codeblock .cb-copy{
+    cursor:pointer; border:none; background:transparent; color:var(--ink-soft);
+    font-size:11.5px; padding:2px 8px; border-radius:6px; transition:var(--transition);
+    display:flex; align-items:center; gap:4px;
+  }
+  .codeblock .cb-copy:hover{background:rgba(92,141,118,.12); color:var(--accent-ink);}
+  .codeblock pre{
+    margin:0; padding:13px 15px; overflow-x:auto;
+    font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    font-size:13px; line-height:1.62; color:var(--code-ink);
+    white-space:pre;
+  }
+  .codeblock pre::-webkit-scrollbar{height:7px;}
+  .codeblock pre::-webkit-scrollbar-thumb{background:#cdd6ce; border-radius:4px;}
+
+  /* 流式光标 & 思考动画 */
+  .cursor{display:inline-block; width:6px; height:15px; background:var(--accent); margin-left:2px; vertical-align:-2px; animation:blink 1s steps(2) infinite;}
+  @keyframes blink{50%{opacity:0;}}
+  .typing{display:inline-flex; gap:4px; padding:6px 4px;}
+  .typing i{width:6px; height:6px; border-radius:50%; background:var(--accent); opacity:.4; animation:bob 1.2s infinite;}
+  .typing i:nth-child(2){animation-delay:.15s;}
+  .typing i:nth-child(3){animation-delay:.3s;}
+  @keyframes bob{0%,60%,100%{transform:translateY(0);opacity:.4;} 30%{transform:translateY(-6px);opacity:.9;}}
+
+  /* 欢迎卡 */
+  .welcome{text-align:center; padding:40px 20px 20px; color:var(--ink-soft); max-width: 580px; margin: 0 auto;}
+  .welcome .wmark{
+    width:60px;height:60px;margin:0 auto 20px;border-radius:18px;
+    display:grid;place-items:center;
+    background:linear-gradient(135deg,#6b9c83,#46705a);
+    box-shadow:0 8px 24px rgba(92,141,118,0.22);
+  }
+  .welcome .wmark svg{width:34px;height:34px;}
+  .welcome h1{margin:0 0 8px; font-size:22px; color:var(--ink); font-weight:700; letter-spacing: -0.3px;}
+  .welcome p{margin:0; font-size:14px; line-height: 1.5;}
+  .chips{display:flex; flex-direction: column; gap:10px; margin-top:28px; align-items: center;}
+  .chip{
+    font-size:13.5px; color:var(--ink); background:var(--surface);
+    border:1px solid var(--line); padding:10px 18px; border-radius:999px; cursor:pointer;
+    transition:var(--transition); width: 100%; max-width: 400px; text-align: left;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.01); display: flex; align-items: center; justify-content: space-between;
+  }
+  .chip:hover{ border-color:var(--accent); background: var(--surface); transform:translateY(-1.5px); box-shadow: var(--shadow); color: var(--accent-ink); }
+  .chip::after { content: '→'; opacity: 0; transform: translateX(-10px); transition: var(--transition); color: var(--accent); }
+  .chip:hover::after { opacity: 1; transform: none; }
+
+  /* ---------- 输入区 ---------- */
+  footer{flex-shrink:0; padding:10px 24px 24px; background:linear-gradient(transparent, var(--bg) 40%);}
+  .composer{
+    max-width:800px; margin:0 auto; display:flex; align-items:flex-end; gap:12px;
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:10px 10px 10px 18px; box-shadow:var(--shadow); transition:var(--transition);
+  }
+  .composer:focus-within{border-color:var(--accent); box-shadow:0 0 0 4px rgba(92,141,118,0.12);}
+  .composer textarea{
+    flex:1; border:none; outline:none; resize:none; background:transparent;
+    font:inherit; font-size:14.5px; line-height:1.5; color:var(--ink);
+    max-height:140px; padding:6px 0;
+  }
+  .composer textarea::placeholder{color:#b2b5ae;}
+  .send{
+    width:40px; height:40px; flex-shrink:0; border:none; border-radius:12px; cursor:pointer;
+    background:var(--accent); color:#fff; display:grid; place-items:center; transition:var(--transition);
+  }
+  .send:hover:not(:disabled){background:#46705a; transform:scale(1.03) translateY(-1px); box-shadow: 0 4px 12px rgba(70,112,90,0.25);}
+  .send:disabled{background:#d2d5cf; cursor:not-allowed;}
+  .send svg{width:20px;height:20px;}
+  .hint{max-width:800px; margin:10px auto 0; text-align:center; font-size:12px; color:var(--ink-soft);}
+
+  @media (max-width:600px){
+    .brand .sub, .status span, .config-title {display:none;}
+    .config-panel { padding: 8px 16px; gap: 8px; }
+    .server-input-wrapper { max-width: 100%; }
+    .welcome{padding-top:20px;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="mark" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M7 4c0 2.2-.6 4-2 5.5"/><path d="M12 3.5c.2 2.4 0 4.4-.8 6"/><path d="M17 4c0 2.2.6 4 2 5.5"/>
+      <path d="M5 13.5C5 17.5 8 20.5 12 20.5s7-3 7-7c0-1.5-.7-2.6-2-2.6-1.1 0-1.7.7-2.2 1.6-.4.8-1.4 1.3-2.8 1.3s-2.4-.5-2.8-1.3C8.7 11.7 8.1 11 7 11c-1.3 0-2 1.1-2 2.5Z"/>
+    </svg>
+  </div>
+  <div class="brand">
+    <span class="name"><b>Ibex</b></span>
+    <span class="sub">Ibex · 你的开发场景 Agent</span>
+  </div>
+  <div class="status">
+    <span class="dot" id="dot"></span>
+    <span id="statusText">就绪</span>
+  </div>
+</header>
+
+<div class="config-panel">
+  <div class="config-title">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect><rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect><line x1="6" y1="6" x2="6.01" y2="6"></line><line x1="6" y1="18" x2="6.01" y2="18"></line></svg>
+    服务器环境:
+  </div>
+  <div class="server-input-wrapper">
+    <input type="text" id="serverInput" placeholder="请输入后端 API 地址..." autocomplete="off">
+  </div>
+  <div class="server-presets" id="presets">
+    <button class="preset-btn" data-url="http://localhost:8000">本地(8000)</button>
+    <button class="preset-btn" data-url="http://127.0.0.1:18700">线上测试</button>
+  </div>
+</div>
+
+<main id="main">
+  <div class="thread" id="thread">
+    <div class="welcome" id="welcome">
+      <div class="wmark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M7 4c0 2.2-.6 4-2 5.5"/><path d="M12 3.5c.2 2.4 0 4.4-.8 6"/><path d="M17 4c0 2.2.6 4 2 5.5"/>
+          <path d="M5 13.5C5 17.5 8 20.5 12 20.5s7-3 7-7c0-1.5-.7-2.6-2-2.6-1.1 0-1.7.7-2.2 1.6-.4.8-1.4 1.3-2.8 1.3s-2.4-.5-2.8-1.3C8.7 11.7 8.1 11 7 11c-1.3 0-2 1.1-2 2.5Z"/>
+        </svg>
+      </div>
+      <h1>跟 Ibex 聊聊</h1>
+      <p>看代码、改 Issue、跑测试 —— 在隔离沙箱里替你干活</p>
+      <div class="chips">
+        <button class="chip">用一句话解释什么是幂等性</button>
+        <button class="chip">写一个判断偶数的 Python 函数</button>
+        <button class="chip">解释一下任务队列是什么</button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="composer">
+    <textarea id="input" rows="1" placeholder="给 Ibex 发条消息… (Enter 发送，Shift+Enter 换行)"></textarea>
+    <button class="send" id="send" aria-label="发送">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12h14M13 6l6 6-6 6"/>
+      </svg>
+    </button>
+  </div>
+  <div class="hint">Ibex 可能会出错 · 重要操作请人工确认</div>
+</footer>
+
+<script>
+/* ============================================================
+   服务器配置逻辑（动态响应 + 本地持久化缓存）
+   ============================================================ */
+const serverInput = document.getElementById("serverInput");
+const presetsContainer = document.getElementById("presets");
+
+let BACKEND = localStorage.getItem("ibex_backend_url") || "http://localhost:8000";
+serverInput.value = BACKEND;
+
+function updatePresetActiveState(currentUrl) {
+  document.querySelectorAll(".preset-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.getAttribute("data-url") === currentUrl);
+  });
+}
+updatePresetActiveState(BACKEND);
+
+serverInput.addEventListener("input", () => {
+  BACKEND = serverInput.value.trim();
+  localStorage.setItem("ibex_backend_url", BACKEND);
+  updatePresetActiveState(BACKEND);
+});
+
+presetsContainer.addEventListener("click", (e) => {
+  if (e.target.classList.contains("preset-btn")) {
+    const selectedUrl = e.target.getAttribute("data-url");
+    BACKEND = selectedUrl;
+    serverInput.value = selectedUrl;
+    localStorage.setItem("ibex_backend_url", selectedUrl);
+    updatePresetActiveState(selectedUrl);
+  }
+});
+
+/* ============================================================
+   核心聊天逻辑
+   ============================================================ */
+const CONV_ID = "web:" + (Math.random().toString(36).slice(2, 10));
+
+const thread   = document.getElementById("thread");
+const main     = document.getElementById("main");
+const input    = document.getElementById("input");
+const sendBtn  = document.getElementById("send");
+const welcome  = document.getElementById("welcome");
+const dot      = document.getElementById("dot");
+const statusText = document.getElementById("statusText");
+
+const PAW = `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M7 4c0 2.2-.6 4-2 5.5"/><path d="M12 3.5c.2 2.4 0 4.4-.8 6"/><path d="M17 4c0 2.2.6 4 2 5.5"/>
+  <path d="M5 13.5C5 17.5 8 20.5 12 20.5s7-3 7-7c0-1.5-.7-2.6-2-2.6-1.1 0-1.7.7-2.2 1.6-.4.8-1.4 1.3-2.8 1.3s-2.4-.5-2.8-1.3C8.7 11.7 8.1 11 7 11c-1.3 0-2 1.1-2 2.5Z"/></svg>`;
+
+let busy = false;
+
+input.addEventListener("input", () => {
+  input.style.height = "auto";
+  input.style.height = Math.min(input.scrollHeight, 140) + "px";
+});
+
+document.querySelectorAll(".chip").forEach(c => {
+  c.addEventListener("click", () => { input.value = c.textContent; send(); });
+});
+
+input.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+});
+sendBtn.addEventListener("click", send);
+
+function setStatus(on, text){ dot.classList.toggle("on", on); statusText.textContent = text; }
+
+/* ---------- 文本渲染：支持 ```代码块``` + 行内 `code` ---------- */
+function escapeHtml(s){
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+function renderInline(s){
+  // 只在普通文本段里处理行内 code
+  return escapeHtml(s).replace(/`([^`\n]+)`/g, '<code class="inline">$1</code>');
+}
+function codeBlockHtml(lang, code){
+  const label = (lang || "code").trim() || "code";
+  const safe = escapeHtml(code.replace(/\n$/, ""));
+  return `<div class="codeblock">
+    <div class="cb-head">
+      <span class="cb-lang">${escapeHtml(label)}</span>
+      <span class="cb-dots"><i></i><i></i><i></i></span>
+      <button class="cb-copy" type="button">复制</button>
+    </div>
+    <pre><code>${safe}</code></pre>
+  </div>`;
+}
+/* 把整段文本拆成 文本段 / 代码块 交替渲染 */
+function render(text){
+  const parts = [];
+  const re = /```([^\n`]*)\n?([\s\S]*?)```/g;   // ```lang\n code ```
+  let last = 0, m;
+  while ((m = re.exec(text)) !== null){
+    if (m.index > last){
+      const seg = text.slice(last, m.index);
+      if (seg) parts.push(`<span class="seg">${renderInline(seg)}</span>`);
+    }
+    parts.push(codeBlockHtml(m[1], m[2]));
+    last = re.lastIndex;
+  }
+  if (last < text.length){
+    const seg = text.slice(last);
+    if (seg) parts.push(`<span class="seg">${renderInline(seg)}</span>`);
+  }
+  return parts.join("") || `<span class="seg">${renderInline(text)}</span>`;
+}
+/* 流式中途渲染：未闭合的 ``` 也先按代码块显示，避免半截乱码 */
+function renderStreaming(text){
+  const ticks = (text.match(/```/g) || []).length;
+  if (ticks % 2 === 1){
+    // 有一个未闭合的代码块，补一个结尾再渲染
+    return render(text + "\n```");
+  }
+  return render(text);
+}
+
+/* 给某个气泡内的代码块绑定“复制” */
+function bindCopy(bubble){
+  bubble.querySelectorAll(".codeblock").forEach(block => {
+    const btn = block.querySelector(".cb-copy");
+    const code = block.querySelector("pre code");
+    if (!btn || !code || btn.dataset.bound) return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", () => {
+      navigator.clipboard.writeText(code.innerText).then(() => {
+        const old = btn.textContent; btn.textContent = "已复制 ✓";
+        setTimeout(() => btn.textContent = old, 1400);
+      }).catch(() => {});
+    });
+  });
+}
+
+function addMsg(role, html){
+  if (welcome && welcome.parentNode) welcome.remove();
+  const m = document.createElement("div");
+  m.className = "msg " + role;
+  const av = role === "bot" ? `<div class="av">${PAW}</div>` : `<div class="av">你</div>`;
+  m.innerHTML = `${av}<div class="bubble">${html}</div>`;
+  thread.appendChild(m);
+  const bubble = m.querySelector(".bubble");
+  bindCopy(bubble);
+  scrollDown();
+  return bubble;
+}
+
+function scrollDown(){ main.scrollTop = main.scrollHeight; }
+
+async function send(){
+  const text = input.value.trim();
+  if (!text || busy) return;
+  busy = true; sendBtn.disabled = true;
+  setStatus(true, "处理中…");
+
+  addMsg("user", render(text));
+  input.value = ""; input.style.height = "auto";
+
+  const bubble = addMsg("bot", `<span class="typing"><i></i><i></i><i></i></span>`);
+
+  try {
+    const streamed = await tryStream(text, bubble);
+    if (!streamed) await fallbackRequest(text, bubble);
+    bindCopy(bubble);
+    setStatus(false, "就绪");
+  } catch (err) {
+    bubble.innerHTML = `<span style="color:#b4534b; font-weight:500;">连接失败：${err.message}</span>
+      <div style="font-size:12.5px;color:var(--ink-soft);margin-top:8px; line-height: 1.5;">
+        请检查：<br>
+        ① 当前配置的服务器地址 <b>${BACKEND}</b> 是否正确；<br>
+        ② 后端是否已开启 <b>CORS 跨域请求</b>；<br>
+        ③ 后端服务是否正在正常运行。
+      </div>`;
+    setStatus(false, "连接失败");
+  } finally {
+    busy = false; sendBtn.disabled = false; input.focus(); scrollDown();
+  }
+}
+
+/* ---------- 流式：POST /chat/stream（SSE） ---------- */
+async function tryStream(text, bubble){
+  let resp;
+  try {
+    resp = await fetch(`${BACKEND}/chat/stream`, {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ text, source:"web", conversation_id: CONV_ID }),
+    });
+  } catch { return false; }
+  if (!resp.ok || !resp.body) return false;
+  const ctype = resp.headers.get("content-type") || "";
+  if (!ctype.includes("text/event-stream") && !ctype.includes("stream")) return false;
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let acc = "", buf = "";
+  bubble.innerHTML = `<span class="cursor"></span>`;
+
+  while (true){
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream:true });
+    const lines = buf.split("\n");
+    buf = lines.pop();
+    for (const line of lines){
+      const s = line.trim();
+      if (!s || s.startsWith(":")) continue;
+      if (s.startsWith("data:")){
+        const data = s.slice(5).trim();
+        if (data === "[DONE]") continue;
+        let piece = data;
+        try { const j = JSON.parse(data); piece = j.text ?? j.content ?? j.delta ?? data; } catch {}
+        acc += piece;
+        bubble.innerHTML = renderStreaming(acc) + `<span class="cursor"></span>`;
+        scrollDown();
+      }
+    }
+  }
+  bubble.innerHTML = render(acc || "（无内容）");
+  bindCopy(bubble);
+  return true;
+}
+
+/* ---------- 降级：POST /webhook/generic（前端打字机）---------- */
+async function fallbackRequest(text, bubble){
+  const resp = await fetch(`${BACKEND}/webhook/generic`, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ text, source:"web", conversation_id: CONV_ID }),
+  });
+  if (!resp.ok) throw new Error("HTTP " + resp.status);
+  const data = await resp.json();
+  const reply = data.reply ?? data.detail ?? JSON.stringify(data);
+  await typewriter(bubble, reply);
+}
+
+/* 打字机：逐字出现，代码块在收尾时整体成形 */
+function typewriter(bubble, text){
+  return new Promise(resolve => {
+    let i = 0;
+    bubble.innerHTML = `<span class="cursor"></span>`;
+    const step = () => {
+      i += Math.max(1, Math.round(text.length / 120));
+      const slice = text.slice(0, i);
+      bubble.innerHTML = renderStreaming(slice) + (i < text.length ? `<span class="cursor"></span>` : "");
+      scrollDown();
+      if (i < text.length) setTimeout(step, 16);
+      else { bubble.innerHTML = render(text); bindCopy(bubble); resolve(); }
+    };
+    step();
+  });
+}
+
+input.focus();
+</script>
+</body>
+</html>

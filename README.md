@@ -18,7 +18,7 @@
 
 > **主进程调度、沙箱执行、密钥绝不进沙箱。**
 
-Ibex 基于 **DeepAgents + LangGraph** 构建，以 **Agent Harness（智能体工程骨架）** 为核心理念，落地了一个真实可用的研发助手：它能在隔离沙箱里看代码、改 Issue、跑测试，并通过飞书 / CLI / Webhook 多渠道为团队提供服务，覆盖 Agent 工程从 **构建 → 隔离 → 多渠道接入 → 异步化 → 多租户治理 → 可观测 → 评估 → 压测 → 部署上线** 的完整生产链路。
+Ibex 基于 **DeepAgents + LangGraph** 构建，以 **Agent Harness（智能体工程骨架）** 为核心理念，落地了一个真实可用的研发助手：它能在隔离沙箱里看代码、改 Issue、跑测试，并通过飞书 / Web / CLI / Webhook 多渠道为团队提供服务，覆盖 Agent 工程从 **构建 → 隔离 → 多渠道接入 → 异步化 → 多租户治理 → 可观测 → 评估 → 压测 → 部署上线** 的完整生产链路。
 
 ## 核心特性
 
@@ -43,6 +43,7 @@ Ibex 基于 **DeepAgents + LangGraph** 构建，以 **Agent Harness（智能体�
 | 渠道 | 实现 | 适用 |
 |---|---|---|
 | 🛰 **飞书** | lark-oapi 长连接 / Webhook 双模式 | 团队协作 |
+| 🌐 **Web** | 零依赖单页面前端（流式 UI、代码块渲染） | 浏览器直接对话 |
 | 💻 **CLI** | 命令行客户端 | 开发者、CI 集成 |
 | 🪝 **Webhook** | 通用 HTTP 接收 | GitHub Issue / 监控告警等外部事件 |
 
@@ -76,7 +77,7 @@ Ibex 基于 **DeepAgents + LangGraph** 构建，以 **Agent Harness（智能体�
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│  接入层 │ 飞书长连接 │ CLI │ Webhook（外部事件）                  │
+│  接入层 │ 飞书长连接 │ Web 前端 │ CLI │ Webhook（外部事件）            │
 └──────────┬───────────┴──────────┴────────────────────────────┘
            │ ChannelAdapter（统一 InboundMessage）
            ▼
@@ -123,6 +124,7 @@ ibex-agent/
 │   └── schemas.py
 ├── agent/                  # 主 Agent 构建（DeepAgents）+ 团队任务编排
 ├── channels/               # 多渠道适配器（飞书 / CLI / Webhook / 会话派生）
+├── web/                    # 零依赖单页面前端（对接 /webhook/generic）
 ├── sandbox/                # 沙箱抽象与实现
 │   ├── docker_sandbox.py   # 加固容器实现（BaseSandbox）
 │   ├── manager.py          # 生命周期管理
@@ -234,7 +236,14 @@ ssh -L 19090:127.0.0.1:19090 -L 13000:127.0.0.1:13000 root@服务器IP
 
 ## 三种使用方式
 
-### 1. CLI（开发者 / 自动化）
+### 1. Web（浏览器对话）
+
+```bash
+# 直接用浏览器打开 web/index.html，右上角填后端地址（默认 http://localhost:8000）
+# 无需任何构建工具：纯 HTML + 原生 JS，后端已配 CORS
+```
+
+### 2. CLI（开发者 / 自动化）
 
 ```bash
 # 用法一：直接 curl（bash）
@@ -246,11 +255,11 @@ curl -X POST http://服务器IP:18700/webhook/generic \
 uv run python -m channels.cli --session mywork "用一句话解释幂等性"
 ```
 
-### 2. Webhook（外部事件驱动）
+### 3. Webhook（外部事件驱动）
 
 任意外部系统 POST `{"text": "...", "source": "..."}` 即可触发，天然适配 GitHub Issue 回调、监控告警等场景；内置事件 id 幂等去重。
 
-### 3. 飞书（团队协作）
+### 4. 飞书（团队协作）
 
 在飞书开放平台创建应用机器人，在 `.env` 填上 `IBEX_FEISHU_APP_ID` / `IBEX_FEISHU_APP_SECRET`，重启 feishu 服务：
 
@@ -300,7 +309,6 @@ compose 自带 Prometheus + Grafana：HTTP 层 QPS / 错误率 / 延迟 P99，�
 
 ## Roadmap
 
-- [ ] Web 前端单页面（流式输出 + 代码块渲染）
 - [ ] Grafana Dashboard as Code（随项目附带 JSON，一键导入）
 - [ ] L2 gVisor / L3 Kata 沙箱档位实测文档
 - [ ] Eval 质量门禁接入 GitHub Actions
