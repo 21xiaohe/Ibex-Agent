@@ -3,28 +3,26 @@
 两个工程要点：
 ① 回调验证：飞书 Webhook 模式首次会发 {"type":"url_verification","challenge":"..."}，
    必须原样返回 challenge（官方要求 1 秒内）；
-② 快速返回 + 幂等：外部平台会重试，需立即 200 并对重复事件去重（用事件 id）。
+② 快速返回 + 可靠异步：外部平台会重试，需立即 200 并对重复事件去重（Redis TTL +
+   arq job_id 双保险）；消息处理投递给 arq 队列，由独立 worker 执行后回发——
+   持久化、失败重试、重启不丢。
 """
-from fastapi import APIRouter, BackgroundTasks, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from channels.base import InboundMessage
-from channels.handler import handle_message
 from infra.logging import get_logger
 from infra.idempotency import seen_before
 from obs.metrics import IDEMPOTENCY_HITS
+from tasks.queue import enqueue_issue
 
 logger = get_logger()
 
 router = APIRouter(prefix="/webhook", tags=["webhook"])
 
-# 简易幂等：记录已处理事件 id（生产用 Redis 带 TTL，见；这里先内存演示）
-_seen_event_ids: set[str] = set()
-
 
 @router.post("/feishu")
-async def feishu_webhook(request: Request, background: BackgroundTasks):
-    """飞书 Webhook 回调模式入口（与 2.3 长连接二选一）。"""
+async def feishu_webhook(request: Request):
+    """飞书 Webhook 回调模式入口（与长连接二选一）。"""
     body = await request.json()
 
     # ① challenge 验证:配置回调地址时飞书会先发这个,原样返回 challenge
@@ -51,25 +49,17 @@ async def feishu_webhook(request: Request, background: BackgroundTasks):
         open_id = body.get("event", {}).get("sender", {}).get("sender_id", {}).get("open_id", "unknown")
 
         if text:
-            inbound = InboundMessage(
-                channel="feishu", user_id=open_id, text=text,
-                conversation_id=chat_id, raw=body,
-            )
-            cp = request.app.state.checkpointer
-            st = request.app.state.store
+            payload = {
+                "channel": "feishu", "user_id": open_id, "text": text,
+                "conversation_id": chat_id, "tenant_id": "default",
+                "reply_to": {"type": "feishu", "chat_id": chat_id},
+            }
+            # ④ 投递 arq 队列（独立 worker 执行：持久化/失败重试/重启不丢），
+            #    worker 完成后按 reply_to 把回复发回飞书群。
+            #    job_id=event_id：arq 对同 id 重复入队自动去重——与②的 Redis 短路构成双保险。
+            await enqueue_issue(request.app.state.redis, payload, job_id=event_id or None)
 
-            async def _process():
-                from channels.feishu import FeishuChannel
-                fs = FeishuChannel()
-                reply = await handle_message(inbound, cp, st)
-                await fs.send(chat_id, reply)
-
-            # 用 FastAPI 原生 BackgroundTasks（响应返回后执行）——比游离的
-            # asyncio.create_task 正规：它由框架管理、保证在响应后调度。
-            # ⚠️ 但它仍无持久化/重试/重启不丢——慢任务的可靠处理见 arq 队列。
-            background.add_task(_process)
-
-    # ④ 立即 200（飞书 3 秒约束）——不等 agent 跑完
+    # ⑤ 立即 200（飞书 3 秒约束）——不等 agent 跑完
     return JSONResponse({"code": 0})
 
 

@@ -1,13 +1,14 @@
-"""channels/feishu_ws.py —— 飞书长连接接收端（独立进程运行）
+"""channels/feishu_ws.py —— 飞书长连接接收端（独立进程运行，纯 producer）
 
-用 lark 长连接客户端监听 im.message.receive_v1。本章（A 方案）做到：
-收到消息 → 立即回执（满足 3 秒）→ 在事件循环里处理并把结果发回。
+用 lark 长连接客户端监听 im.message.receive_v1。职责只有三件事：
+收到消息 → 立即回执（满足 3 秒）→ 投递 arq 队列。
 
-⚠️ 慢任务的可靠后台处理（持久化/重试/重启不丢）见 arq 队列方案。
-本文件不使用游离的 asyncio.create_task 当"后台"——那不可靠。
+消息处理（Agent 执行）全部在 arq worker 进程完成，完成后由 worker
+按 payload.reply_to 把结果发回飞书会话——收发与处理彻底分离，
+慢任务获得持久化/失败重试/重启不丢的可靠性。
 
 运行：uv run python -m channels.feishu_ws
-（需先 uv add lark-oapi，.env 配好飞书凭证；本机 Postgres 在跑）
+（需先 uv add lark-oapi，.env 配好飞书凭证；Redis 与 arq worker 在跑）
 """
 import asyncio
 import json
@@ -17,10 +18,9 @@ from lark_oapi.api.im.v1 import P2ImMessageReceiveV1
 
 from channels.base import InboundMessage
 from channels.feishu import FeishuChannel
-from channels.handler import handle_message
-from infra.persistence import open_persistence
 from infra.settings import get_settings
 from infra.logging import get_logger
+from tasks.queue import enqueue_issue, get_arq_redis
 
 logger = get_logger()
 
@@ -42,7 +42,7 @@ def extract_feishu_message(event: P2ImMessageReceiveV1) -> InboundMessage | None
         # 所以要先 json.loads 再取 "text" 字段——直接当字符串用会拿到一串带引号的 JSON。
         text = json.loads(msg.content).get("text", "").strip()
     except Exception:
-        pass                       # 非文本消息（图片/文件等）content 结构不同，本章只处理文本
+        pass                       # 非文本消息（图片/文件等）content 结构不同，只处理文本
     if not text:
         return None                # 空文本或非文本消息：忽略
     return InboundMessage(channel="feishu", user_id=open_id, text=text,
@@ -50,20 +50,25 @@ def extract_feishu_message(event: P2ImMessageReceiveV1) -> InboundMessage | None
 
 
 async def run():
-    """启动长连接，常驻接收。持久化资源在本进程内建一份、全程复用。"""
+    """启动长连接，常驻接收。本进程只收消息/回执/入队，处理与回发都在 arq worker。"""
     s = get_settings()
     feishu = FeishuChannel()
-    pool, checkpointer, store = await open_persistence()
+    arq_redis = await get_arq_redis()
     loop = asyncio.get_running_loop()
 
-    async def _handle(inbound: InboundMessage):
+    async def _enqueue(inbound: InboundMessage):
         await feishu.send(inbound.conversation_id, "收到，正在处理…")   # 先回执
         try:
-            reply = await handle_message(inbound, checkpointer, store)
+            await enqueue_issue(arq_redis, {
+                "channel": inbound.channel,
+                "user_id": inbound.user_id,
+                "text": inbound.text,
+                "conversation_id": inbound.conversation_id,
+                "reply_to": {"type": "feishu", "chat_id": inbound.conversation_id},
+            })
         except Exception as e:  # noqa: BLE001
-            logger.exception("处理飞书消息失败：{}", e)
-            reply = "处理出错了，请稍后再试。"
-        await feishu.send(inbound.conversation_id, reply)
+            logger.exception("消息入队失败：{}", e)
+            await feishu.send(inbound.conversation_id, "处理出错了，请稍后再试。")
 
     def on_message(event: P2ImMessageReceiveV1) -> None:
         # SDK 回调是同步的，且运行在 SDK 自己的线程——用 run_coroutine_threadsafe
@@ -72,7 +77,7 @@ async def run():
         if inbound is None:
             return
         logger.info("飞书收到消息：chat={} user={}", inbound.conversation_id, inbound.user_id)
-        asyncio.run_coroutine_threadsafe(_handle(inbound), loop)
+        asyncio.run_coroutine_threadsafe(_enqueue(inbound), loop)
 
     handler = (
         lark.EventDispatcherHandler.builder("", "")   # 长连接模式 encrypt_key/token 可空
@@ -88,7 +93,7 @@ async def run():
         # cli.start() 是阻塞的；放到线程里跑，保持本事件循环活着以处理回调协程
         await asyncio.to_thread(cli.start)
     finally:
-        await pool.close()
+        await arq_redis.aclose()
 
 
 if __name__ == "__main__":

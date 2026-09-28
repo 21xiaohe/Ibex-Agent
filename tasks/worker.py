@@ -18,6 +18,23 @@ if sys.platform == "win32":
 logger = get_logger()
 
 
+async def _dispatch_reply(reply_to: dict, reply: str) -> None:
+    """任务完成后把结果送回原渠道。
+
+    发送失败只记录不抛——任务结果已持久化在 job result 里，
+    不为了重发一条消息而重跑整个任务（重试语义只覆盖执行，不覆盖投递）。
+    """
+    try:
+        rtype = reply_to.get("type")
+        if rtype == "feishu":
+            from channels.feishu import FeishuChannel
+            await FeishuChannel().send(reply_to["chat_id"], reply)
+        else:
+            logger.warning("未知 reply_to 类型，结果未主动送达：{}", reply_to)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("回复发送失败（任务已完成，结果保留在 job result）：{}", e)
+
+
 async def process_issue(ctx: dict, payload: dict) -> dict:
     # 排队等待：用入队时塞进 payload 的 enqueued_at（不依赖 arq 内部字段）
     enqueued_at = payload.get("enqueued_at")
@@ -39,6 +56,8 @@ async def process_issue(ctx: dict, payload: dict) -> dict:
             inbound, ctx["checkpointer"], ctx["store"],
             tenant_id=payload.get("tenant_id", "default"),
         )
+        if payload.get("reply_to"):
+            await _dispatch_reply(payload["reply_to"], reply)
         return {"reply": reply, "conversation_id": inbound.conversation_id}
     finally:
         # 端到端执行耗时（用户真正等的时间）
