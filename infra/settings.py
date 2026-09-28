@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     api_keys: dict[str, str] = {"key-tenant-a": "tenant-a", "key-tenant-b": "tenant-b"}
 
     # =====沙箱隔离 =====
-    sandbox_provider: str = "docker"  # docker（自托管）/ daytona（外部托管）
+    sandbox_provider: str = "docker"  # docker（自托管）/ daytona（外部托管）/ none（本地退化，无沙箱）
     sandbox_runtime: str = "runc"  # runc(加固容器) / runsc(gVisor) / kata(microVM)
     sandbox_image: str = "ibex-sandbox:latest"  # 3.3 会用 Dockerfile 构建这个镜像
     sandbox_workdir: str = "/home/agent"  # 容器内工作目录（tmpfs，可写）

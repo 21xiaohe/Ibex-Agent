@@ -1,7 +1,9 @@
-"""agent/main.py —— Ibex 主 Agent（接入 FilesystemBackend + Skills + Memory）
+"""agent/main.py —— Ibex 主 Agent 构建入口
 
-⚠️ 安全：本章用 FilesystemBackend 仅适用于本地开发/教学。
-   生产/Web 服务请改用 StateBackend + 沙箱（第 8、11 章）。
+构建路径分三层：
+- build_agent_for_service：正式服务路径（channels/worker/routes），按 settings.sandbox_provider 绑定 Docker 任务沙箱
+- build_agent：本地退化路径（FilesystemBackend，无 Docker 环境/单测用）
+- build_team_agent：五子代理团队 + 沙箱（复杂 Issue 的多角色协作）
 """
 from pathlib import Path
 
@@ -47,31 +49,7 @@ def build_model():
     )
 
 
-
-# agent/main.py（节选：build_agent 里加 tools）
 from tools.registry import get_tools
-
-def build_agent(user_id: str = "anonymous", channel: str = "cli"):
-    backend = FilesystemBackend(root_dir=str(PROJECT_ROOT), virtual_mode=True)
-    agent = create_deep_agent(
-        model=build_model(),
-        system_prompt=IBEX_SYSTEM_PROMPT,
-        backend=backend,
-        skills=[str(PROJECT_ROOT / "skills")],
-        memory=[str(PROJECT_ROOT / "AGENTS.md")],
-        tools=get_tools("git", "search", "test"),   # ← 本章新增：按需装配工具
-        middleware=[
-            RequestContextMiddleware(user_id=user_id, channel=channel),
-            ToolAuditMiddleware(),
-            CostMeterMiddleware(),
-        ],
-        checkpointer=MemorySaver(),
-    )
-    logger.info("Ibex 构建完成：已装配 git/search/test 工具 + skills/memory/中间件")
-    return agent
-
-
-# agent/main.py（节选：需要 MCP 工具时用这个异步构建函数）
 from tools.registry import get_tools
 from tools.mcp import MCPManager
 
@@ -138,13 +116,15 @@ def build_team_agent(thread_id: str, user_id: str = "anonymous", channel: str = 
     return agent, sandbox, client
 
 
-# agent/main.py（节选：build_agent 接收外部 checkpointer/store）
-def build_agent(checkpointer=None, store=None, user_id="anonymous", channel="api"):
+def build_agent(checkpointer=None, store=None, user_id="anonymous", channel="api", backend=None):
     """服务化版：checkpointer/store 由外部（lifespan）传入并复用。
 
     不传时退化为内存（仅供脚本/测试），传入则用 Postgres 持久化。
+    backend=None 时用本地 FilesystemBackend（无 Docker 环境的退化路径）；
+    显式传入沙箱 backend 则所有文件/命令操作都落在沙箱工作目录内。
     """
-    backend = FilesystemBackend(root_dir=str(PROJECT_ROOT), virtual_mode=True)
+    if backend is None:
+        backend = FilesystemBackend(root_dir=str(PROJECT_ROOT), virtual_mode=True)
     return create_deep_agent(
         model=build_model(),
         system_prompt=IBEX_SYSTEM_PROMPT,
@@ -164,10 +144,63 @@ def build_agent(checkpointer=None, store=None, user_id="anonymous", channel="api
         permissions=REVIEWER_PERMISSIONS
     )
 
+
+SANDBOX_PATH_RULES = (
+    "\n\n【执行环境与路径规则——必须严格遵守】"
+    "\n你运行在一个隔离沙箱里，项目代码已位于 `{workdir}/` 下（含 `{workdir}/app/`、`{workdir}/tests/`）。"
+    "\n⚠️ 所有文件操作（write_file/edit_file/read_file）和命令（execute）都【必须】使用以 `{workdir}/` 开头的【绝对路径】。"
+    "\n✅ 正确：写测试到 `{workdir}/tests/test_pricing.py`、改代码 `{workdir}/app/pricing.py`、"
+    "跑测试 `cd {workdir} && python -m pytest -q`。"
+    "\n❌ 错误（会因权限被拒绝，绝不要这样）：`/test_pricing.py`、`test_pricing.py`、`/app/pricing.py` 这类根路径或相对路径。"
+    "\n如果你不确定某文件在哪，先用 `ls {workdir}` 查看，再用绝对路径操作。"
+)
+
+
+async def build_agent_for_service(checkpointer=None, store=None, user_id="anonymous", channel="api"):
+    """正式服务路径（channels/worker/routes）统一走这里：按 settings.sandbox_provider 绑定任务沙箱。
+
+    docker → 每次任务新建加固容器并 seed 项目，Agent 的文件与命令操作全部落在
+             沙箱工作目录内（密钥只在主进程 build_model() 使用，绝不进沙箱）；
+             调用方负责在 finally 中 destroy_sandbox 清理（用完即弃）。
+    none   → 本地 FilesystemBackend 退化路径（无 Docker 环境的演示/测试）。
+
+    返回 (agent, sandbox_or_None)——sandbox 非 None 时调用方必须清理。
+    """
+    s = get_settings()
+    if s.sandbox_provider == "none":
+        return build_agent(checkpointer=checkpointer, store=store,
+                           user_id=user_id, channel=channel), None
+
+    from sandbox.docker_manager import create_one_sandbox, seed_project
+    sb = await create_one_sandbox()
+    await seed_project(sb)
+    workdir = s.sandbox_workdir
+
+    agent = create_deep_agent(
+        model=build_model(),
+        system_prompt=IBEX_SYSTEM_PROMPT + SANDBOX_PATH_RULES.format(workdir=workdir),
+        backend=sb,                                # ← 沙箱后端：文件工具与 execute 全部进沙箱
+        skills=[f"{workdir}/skills"],              # ← seed 后的真实路径
+        memory=[f"{workdir}/AGENTS.md"],
+        tools=get_tools("git", "search"),
+        middleware=[
+            RequestContextMiddleware(user_id=user_id, channel=channel),
+            ToolAuditMiddleware(),
+            CostMeterMiddleware(),
+            LLMConcurrencyMiddleware(),
+            build_fallback_middleware(),
+        ],
+        checkpointer=checkpointer,
+        store=store,
+        permissions=REVIEWER_PERMISSIONS,
+    )
+    logger.info("Ibex 服务版构建完成：Docker 沙箱已创建并 seed 项目到 {}", workdir)
+    return agent, sb
+
 async def build_sandbox_backend():
     """按 IBEX_SANDBOX_PROVIDER 选用沙箱后端，返回 (backend, workdir)。
 
-    docker  → 自托管加固容器（本章，本地可跑）
+    docker  → 自托管加固容器（本地可跑，需 Docker daemon）
     daytona → 外部托管沙箱
     两者都是 BaseSandbox，create_deep_agent(backend=...) 一视同仁。
     """
