@@ -1,4 +1,4 @@
-# middleware/audit.py（节选：补埋点，其余同前文）
+# middleware/audit.py —— 工具审计埋点
 import time
 from collections.abc import Callable
 

@@ -1,4 +1,4 @@
-# subagents/reviewer.py（节选：场景 A —— FilesystemBackend 上的物理只读 reviewer）
+# subagents/reviewer.py —— FilesystemBackend 上的物理只读 reviewer
 from deepagents import FilesystemPermission
 
 REVIEWER_PERMISSIONS = [

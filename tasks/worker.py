@@ -1,4 +1,4 @@
-# tasks/worker.py（节选：on_startup 起指标端口 + 任务埋点）
+# tasks/worker.py —— on_startup 起指标端口 + 任务埋点
 import asyncio
 import sys
 import time

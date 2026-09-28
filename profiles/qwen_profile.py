@@ -14,7 +14,7 @@ QWEN_PROFILE_VERSION = "qwen-profile-v1"
 
 def _qwen_profile() -> HarnessProfile:
     return HarnessProfile(
-        # ① 摘掉对 qwen 无用的 Anthropic 提示词缓存中间件（本章的核心动作）
+        # ① 摘掉对 qwen 无用的 Anthropic 提示词缓存中间件（此 profile 的核心动作）
         #    这正是 3.1 那个"在你栈里空转"的中间件。excluded_middleware 用字符串时
         #    匹配的是【类名】（官方示例即 {"SummarizationMiddleware"} 这种写法）。
         #    ⚠️ 不能排除 FilesystemMiddleware / SubAgentMiddleware / permission 中间件（会 ValueError）。

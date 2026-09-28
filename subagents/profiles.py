@@ -27,7 +27,7 @@ def _model(name: str | None = None):
     )
 
 
-# subagents/profiles.py（节选：把每个子代理的 model 改成按角色路由）
+# subagents/profiles.py —— 子代理模型按角色路由
 from infra.llm_router import get_model_for_role
 from tools.registry import get_tools
 from subagents.schemas import ReviewResult

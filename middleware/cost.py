@@ -1,4 +1,4 @@
-# middleware/cost.py（节选：补 Prometheus 埋点，其余同前文）
+# middleware/cost.py —— Prometheus 成本计量埋点
 import time
 from collections.abc import Callable
 
