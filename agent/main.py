@@ -141,7 +141,6 @@ def build_agent(checkpointer=None, store=None, user_id="anonymous", channel="api
         ],
         checkpointer=checkpointer,      # ← 外部传入（lifespan 的 AsyncPostgresSaver）
         store=store,                    # ← 外部传入（lifespan 的 AsyncPostgresStore）
-        permissions=REVIEWER_PERMISSIONS
     )
 
 
@@ -192,7 +191,6 @@ async def build_agent_for_service(checkpointer=None, store=None, user_id="anonym
         ],
         checkpointer=checkpointer,
         store=store,
-        permissions=REVIEWER_PERMISSIONS,
     )
     logger.info("Ibex 服务版构建完成：Docker 沙箱已创建并 seed 项目到 {}", workdir)
     return agent, sb

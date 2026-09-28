@@ -79,6 +79,10 @@ class Settings(BaseSettings):
     sandbox_cpus: str = "1.0"
     sandbox_pool_size: int = 4  # 沙箱池并发上限
 
+    # =====任务重试（arq 有限退避重试，只覆盖瞬时执行失败）=====
+    task_max_tries: int = 3          # 最多尝试次数（含首次）
+    task_retry_delay: float = 2.0    # 首次重试延迟（秒），指数退避，封顶 60s
+
     # =====并发与限流 =====
     max_concurrent_llm: int = 8  # LLM 并发调用上限
 

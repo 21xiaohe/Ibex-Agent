@@ -14,3 +14,6 @@ logs/
 .env
 .pytest_cache/
 .idea/
+
+# py_compile 临时输出（.t 后缀）
+*.t

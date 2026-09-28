@@ -4,70 +4,106 @@
 - description 动作导向，主 Agent 据此决定委派；
 - system_prompt 写全（子代理不继承主 Agent 的 prompt）；
 - tools 最小化（只给该角色需要的，提升聚焦与安全）；
-- model 按任务难度选（省成本/保质量）；
-- Reviewer 用 response_format 输出结构化结论（可编程消费）。
+- model 按角色分档（planner/coder/reviewer 用 strong，tester 用 standard，researcher 用 cheap）；
+- Reviewer 用 response_format 输出结构化结论（可编程消费），并在独立只读快照里审查。
 """
-from langchain.chat_models import init_chat_model
+from typing import Any
 
+from langchain.messages import AIMessage
+from langchain_core.runnables import RunnableLambda
+
+from deepagents import create_deep_agent
+from infra.llm_router import get_model_for_role
 from infra.settings import get_settings
 from tools.registry import get_tools
+from subagents.reviewer import REVIEWER_PERMISSIONS
 from subagents.schemas import ReviewResult
 
-
-def _model(name: str | None = None):
-    """按需返回模型对象。默认用配置里的主模型；可传不同模型名做分级。
-    这里用同一个 qwen 端点演示；真实项目可给不同角色配不同模型（见多模型路由）。"""
-    s = get_settings()
-    return init_chat_model(
-        model=name or s.model_name,
-        model_provider=s.model_provider,
-        api_key=s.api_key.get_secret_value(),
-        base_url=s.base_url,
-        temperature=0,
-    )
+_PATH_RULE = (
+    "项目代码位于 `{workdir}/` 下，所有文件读写与命令执行必须使用以 `{workdir}/` 开头的绝对路径。"
+)
 
 
-# subagents/profiles.py —— 子代理模型按角色路由
-from infra.llm_router import get_model_for_role
-from tools.registry import get_tools
-from subagents.schemas import ReviewResult
+def _build_reviewer_runnable(workdir: str, source_sandbox: Any):
+    """构造 Reviewer 的 runnable：优先在独立只读快照里审查，退化为 FilesystemBackend + 只读权限。
+
+    只读快照靠文件系统权限（Docker 容器 chmod -R a-w）保证，不靠 prompt 自律；
+    审查完用 finally 销毁快照（用完即弃）。
+    """
+    prompt = "你是独立代码审查者，只读审查当前改动，检查正确性、测试证据与规范，返回结构化结论。" + _PATH_RULE.format(workdir=workdir)
+
+    async def _review(state: dict, config: dict) -> dict:
+        if source_sandbox is not None:
+            from sandbox.docker_manager import create_readonly_sandbox, destroy_sandbox
+            snapshot = await create_readonly_sandbox(source_sandbox)
+            try:
+                reviewer = create_deep_agent(
+                    model=get_model_for_role("reviewer"),
+                    system_prompt=prompt,
+                    backend=snapshot,
+                    tools=[],
+                    subagents=[],
+                    memory=[f"{workdir.rstrip('/')}/AGENTS.md"],
+                    response_format=ReviewResult,
+                )
+                result = await reviewer.ainvoke({"messages": state["messages"]}, config)
+                verdict = result.get("structured_response")
+                if verdict is not None:
+                    result["messages"].append(AIMessage(content=verdict.model_dump_json()))
+                return result
+            finally:
+                await destroy_sandbox(snapshot)
+
+        # 退化路径：无 Docker 沙箱时，用 FilesystemBackend + 只读权限（禁一切写）
+        reviewer = create_deep_agent(
+            model=get_model_for_role("reviewer"),
+            system_prompt=prompt,
+            backend=None,
+            tools=[],
+            subagents=[],
+            permissions=REVIEWER_PERMISSIONS,
+            response_format=ReviewResult,
+        )
+        result = await reviewer.ainvoke({"messages": state["messages"]}, config)
+        verdict = result.get("structured_response")
+        if verdict is not None:
+            result["messages"].append(AIMessage(content=verdict.model_dump_json()))
+        return result
+
+    return RunnableLambda(_review)
 
 
-def build_subagents(workdir: str = "/home/daytona") -> list[dict]:
-    # workdir 透传：和主规划一致，会动文件的子代理 prompt 里要带 workdir 绝对路径规则
-    # （此处 system_prompt 用"……同前文"省略，实际内容含前文的 PATH_RULE）
+def build_subagents(workdir: str = "/home/daytona", source_sandbox: Any = None) -> list[dict]:
+    """构建五个专职子代理。source_sandbox 为 DockerSandbox 时，reviewer 在只读快照里审查。"""
     planner = {
         "name": "planner",
         "description": "把一个开发 Issue 拆解成清晰、有序、可执行的步骤。",
-        "system_prompt": "你是资深技术规划者……（含 workdir 路径规则）",
+        "system_prompt": "你是资深技术规划者。" + _PATH_RULE.format(workdir=workdir),
         "tools": [],
         "model": get_model_for_role("planner"),     # strong 档（拆解要准）
     }
     researcher = {
         "name": "researcher",
         "description": "阅读相关代码、检索资料，为改动提供事实依据。",
-        "system_prompt": "你是代码调研员……（含 workdir 路径规则）",
+        "system_prompt": "你是代码调研员。" + _PATH_RULE.format(workdir=workdir),
         "tools": get_tools("search"),
         "model": get_model_for_role("researcher"),   # cheap 档（读+总结，省成本）
     }
     coder = {
         "name": "coder",
         "description": "按既定计划编写或修改代码。",
-        "system_prompt": "你是严谨的工程师……（含 workdir 路径规则）",
+        "system_prompt": "你是严谨的工程师。" + _PATH_RULE.format(workdir=workdir),
         "model": get_model_for_role("coder"),        # strong 档（写代码保质量）
     }
     tester = {
         "name": "tester",
         "description": "为改动写测试并在沙箱跑 pytest。",
-        "system_prompt": "你是测试工程师……（含 workdir 路径规则）",
+        "system_prompt": "你是测试工程师。" + _PATH_RULE.format(workdir=workdir),
         "model": get_model_for_role("tester"),       # standard 档
     }
     reviewer = {
         "name": "reviewer",
-        "description": "审查代码并做安全自查，给出结构化结论。",
-        "system_prompt": "你是代码审查者……（含 workdir 路径规则）",
-        "tools": get_tools(),
-        "model": get_model_for_role("reviewer"),     # strong 档（审查要严）
-        "response_format": ReviewResult,
+        "description": "在独立只读快照中审查代码，给出结构化结论。",
+        "runnable": _build_reviewer_runnable(workdir, source_sandbox),
     }
     return [planner, researcher, coder, tester, reviewer]

@@ -1,14 +1,18 @@
-# tasks/worker.py —— on_startup 起指标端口 + 任务埋点
+# tasks/worker.py —— on_startup 起指标端口 + 任务埋点 + 瞬时失败有限重试
 import asyncio
 import sys
 import time
 from datetime import datetime, timezone
 
+import httpx
+from arq import Retry
+from openai import APIConnectionError, APITimeoutError, RateLimitError, InternalServerError
 from prometheus_client import start_http_server
 
 from channels.base import InboundMessage
 from channels.handler import handle_message
 from infra.persistence import open_persistence
+from infra.settings import get_settings
 from infra.logging import get_logger
 from obs.metrics import AGENT_TASK_DURATION, AGENT_QUEUE_WAIT, AGENT_QUEUE_LENGTH
 
@@ -59,6 +63,18 @@ async def process_issue(ctx: dict, payload: dict) -> dict:
         if payload.get("reply_to"):
             await _dispatch_reply(payload["reply_to"], reply)
         return {"reply": reply, "conversation_id": inbound.conversation_id}
+    except (TimeoutError, ConnectionError, httpx.TransportError,
+            APIConnectionError, APITimeoutError, RateLimitError, InternalServerError) as e:
+        # 瞬时失败（连接/超时/模型限流/服务端 5xx）：做有限指数退避重试。
+        # 用 arq 的 job_try（从 1 起）算退避，达 task_max_tries 后不再重试、直接抛错。
+        settings = get_settings()
+        attempt = ctx.get("job_try", 1)
+        if attempt < settings.task_max_tries:
+            defer = min(settings.task_retry_delay * (2 ** (attempt - 1)), 60)
+            logger.warning("任务瞬时失败，第 {}/{} 次后重试（{}s 后）：{}",
+                           attempt, settings.task_max_tries, defer, type(e).__name__)
+            raise Retry(defer=defer) from None
+        raise  # 尝试次数耗尽，让 arq 记录最终失败
     finally:
         # 端到端执行耗时（用户真正等的时间）
         AGENT_TASK_DURATION.observe(time.perf_counter() - start)
