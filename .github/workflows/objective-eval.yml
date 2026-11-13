@@ -1,0 +1,44 @@
+name: Objective model evaluation (manual)
+on:
+  workflow_dispatch:
+    inputs:
+      repeats:
+        description: Trials per task (1-5; uses paid model API)
+        required: true
+        default: '2'
+      minimum_success_rate:
+        description: Required fraction of all successful trials
+        required: true
+        default: '1.0'
+permissions:
+  contents: read
+jobs:
+  objective:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      IBEX_API_KEY: ${{ secrets.IBEX_API_KEY }}
+      IBEX_MODEL_NAME: ${{ vars.IBEX_MODEL_NAME || 'qwen-max' }}
+      IBEX_BASE_URL: ${{ vars.IBEX_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1' }}
+      IBEX_SANDBOX_PROVIDER: docker
+      IBEX_SANDBOX_IMAGE: ibex-sandbox:eval
+      IBEX_SANDBOX_OWNER: objective-${{ github.run_id }}
+      EVAL_REPEATS: ${{ inputs.repeats }}
+      EVAL_MIN_SUCCESS: ${{ inputs.minimum_success_rate }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - name: Require configured model credentials
+        run: python -c "import os; assert os.environ.get('IBEX_API_KEY'), 'Set repository secret IBEX_API_KEY before running model evaluation'"
+      - run: pip install -r requirements.txt
+      - run: docker build -t ibex-sandbox:eval -f sandbox/Dockerfile .
+      - name: Execute frozen tasks
+        run: python -m eval.run_objective --repeats "$EVAL_REPEATS" --min-success-rate "$EVAL_MIN_SUCCESS" --output logs/objective-ci.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: objective-results
+          path: logs/objective-ci.json

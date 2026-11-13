@@ -23,7 +23,10 @@ class ToolAuditMiddleware(AgentMiddleware):
         start = time.perf_counter()
         status = "ok"
         try:
-            return await handler(request)
+            result = await handler(request)
+            if isinstance(result, ToolMessage) and result.status == "error":
+                status = "error"
+            return result
         except Exception:
             status = "error"
             raise

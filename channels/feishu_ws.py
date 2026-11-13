@@ -20,7 +20,8 @@ from channels.base import InboundMessage
 from channels.feishu import FeishuChannel
 from infra.settings import get_settings
 from infra.logging import get_logger
-from tasks.queue import enqueue_issue, get_arq_redis
+from tasks.queue import submit_job, get_arq_redis
+from channels.feishu_auth import event_job_id
 
 logger = get_logger()
 
@@ -32,6 +33,8 @@ def extract_feishu_message(event: P2ImMessageReceiveV1) -> InboundMessage | None
     飞书事件结构是层层嵌套的：event.event.message 才是消息体、event.event.sender 是发送者。
     """
     msg = event.event.message      # 消息体（含 chat_id、content、message_type 等）
+    if msg.message_type != "text":
+        return None
     sender = event.event.sender    # 发送者信息
     chat_id = msg.chat_id          # 会话标识 → 我们用它做 conversation_id（同会话续聊的关键）
     # open_id 是发送者在本应用下的唯一标识；做了空值兜底，拿不到就标 unknown
@@ -49,26 +52,23 @@ def extract_feishu_message(event: P2ImMessageReceiveV1) -> InboundMessage | None
                           conversation_id=chat_id, raw=None)
 
 
-async def run():
+async def run() -> None:
     """启动长连接，常驻接收。本进程只收消息/回执/入队，处理与回发都在 arq worker。"""
     s = get_settings()
-    feishu = FeishuChannel()
+    from infra.db import build_pg_pool
+    from infra.durable import init_durable_tables
+    pool = build_pg_pool()
+    await pool.open()
+    await init_durable_tables(pool)
     arq_redis = await get_arq_redis()
     loop = asyncio.get_running_loop()
 
-    async def _enqueue(inbound: InboundMessage):
-        await feishu.send(inbound.conversation_id, "收到，正在处理…")   # 先回执
-        try:
-            await enqueue_issue(arq_redis, {
-                "channel": inbound.channel,
-                "user_id": inbound.user_id,
-                "text": inbound.text,
-                "conversation_id": inbound.conversation_id,
-                "reply_to": {"type": "feishu", "chat_id": inbound.conversation_id},
-            })
-        except Exception as e:  # noqa: BLE001
-            logger.exception("消息入队失败：{}", e)
-            await feishu.send(inbound.conversation_id, "处理出错了，请稍后再试。")
+    async def _enqueue(inbound: InboundMessage, identifier: str) -> None:
+        await submit_job(pool, arq_redis, {
+            "channel": inbound.channel, "user_id": inbound.user_id, "text": inbound.text,
+            "conversation_id": inbound.conversation_id, "tenant_id": s.feishu_tenant_id,
+            "reply_to": {"type": "feishu", "chat_id": inbound.conversation_id},
+        }, job_id=event_job_id(identifier))
 
     def on_message(event: P2ImMessageReceiveV1) -> None:
         # SDK 回调是同步的，且运行在 SDK 自己的线程——用 run_coroutine_threadsafe
@@ -77,7 +77,12 @@ async def run():
         if inbound is None:
             return
         logger.info("飞书收到消息：chat={} user={}", inbound.conversation_id, inbound.user_id)
-        asyncio.run_coroutine_threadsafe(_enqueue(inbound), loop)
+        identifier = getattr(getattr(event, "header", None), "event_id", None) or getattr(event.event.message, "message_id", None)
+        if not identifier:
+            logger.error("Ignoring event without a stable provider identity")
+            return
+        future = asyncio.run_coroutine_threadsafe(_enqueue(inbound, identifier), loop)
+        future.add_done_callback(lambda task: logger.error("Feishu enqueue failed: {}", type(task.exception()).__name__) if task.exception() else None)
 
     handler = (
         lark.EventDispatcherHandler.builder("", "")   # 长连接模式 encrypt_key/token 可空
@@ -94,6 +99,7 @@ async def run():
         await asyncio.to_thread(cli.start)
     finally:
         await arq_redis.aclose()
+        await pool.close()
 
 
 if __name__ == "__main__":

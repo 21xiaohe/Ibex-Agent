@@ -14,8 +14,8 @@
 本类的四个成员通过 docker 命令操作那个容器：
     - id              → 容器名，用于外部识别
     - execute         → docker exec 跑命令
-    - upload_files    → docker cp 把宿主文件拷进容器
-    - download_files  → docker cp 把容器文件拷出来读字节
+    - upload_files    → docker exec -i 把字节写入容器内的可写目录
+    - download_files  → docker exec 从容器读取原始字节
 
 同步 vs 异步
 -----------
@@ -25,9 +25,7 @@ BaseSandbox 基类会用 asyncio.to_thread 自动把它们包成异步版本（a
 """
 from __future__ import annotations
 
-import os
 import subprocess
-import tempfile
 
 from deepagents.backends.sandbox import BaseSandbox
 from deepagents.backends.protocol import (
@@ -117,128 +115,51 @@ class DockerSandbox(BaseSandbox):
     # ---------- 必须实现 3：上传文件 ----------
 
     def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
-        """把文件内容写进容器。write_file / edit_file 等高层操作底层都依赖这个方法。
+        """Write bytes via stdin as the container user, including with a read-only root.
 
-        参数
-        ----
-        files : list[tuple[str, bytes]]
-            每个元素是 (容器内绝对路径, 文件字节内容)。
-            例如 [("/home/agent/app/main.py", b"print('hello')")]
-
-        返回
-        ----
-        list[FileUploadResponse]
-            与输入一一对应的结果列表。每个元素包含 path 和可选的 error 字段。
-            支持部分成功：某个文件上传失败不影响其他文件，也不抛异常。
-
-        实现思路
-        --------
-        docker cp 只能从宿主机路径拷文件到容器，不能直接传字节流，
-        所以需要先把字节写到宿主机临时文件，再 docker cp 进去。
+        Parent directories are created inside the container. Each input has a matching
+        response; failed writes are reported instead of claiming successful transfer.
         """
         results: list[FileUploadResponse] = []
-
+        writer = (
+            "import pathlib,sys; p=pathlib.Path(sys.argv[1]); "
+            "p.parent.mkdir(parents=True,exist_ok=True); p.write_bytes(sys.stdin.buffer.read())"
+        )
         for path, content in files:
             try:
-                # 第一步：确保容器内目标目录存在
-                # 比如要写 /home/agent/app/utils/helper.py，
-                # 需要先确保 /home/agent/app/utils/ 目录存在
-                parent = os.path.dirname(path)
-                if parent:
-                    subprocess.run(
-                        ["docker", "exec", self.container_id, "mkdir", "-p", parent],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.STDOUT,
-                        check=False,    # 不因 mkdir 失败而抛异常（目录可能已存在）
-                    )
-
-                # 第二步：把字节内容写到宿主机的临时文件
-                # docker cp 需要一个宿主机上的文件路径作为源，没法直接传 bytes
-                with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                    tmp.write(content)
-                    tmp_path = tmp.name
-
-                # 第三步：用 docker cp 把临时文件拷进容器的目标路径
-                cp = subprocess.run(
-                    ["docker", "cp", tmp_path, f"{self.container_id}:{path}"],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
+                proc = subprocess.run(
+                    ["docker", "exec", "-i", self.container_id, "python", "-c", writer, path],
+                    input=content, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    timeout=60,
                 )
-
-                # 第四步：清理宿主机上的临时文件
-                os.unlink(tmp_path)
-
-                # 根据 docker cp 的退出码判断成功/失败
-                if cp.returncode == 0:
-                    results.append(FileUploadResponse(path=path))
-                else:
-                    err = cp.stdout.decode("utf-8", errors="replace") or "upload_failed"
-                    results.append(FileUploadResponse(path=path, error=err))
-
-            except Exception as e:  # noqa: BLE001
-                # 协议要求：部分成功，不抛异常
-                # 即使某个文件上传出错，也记录 error 并继续处理下一个
-                results.append(FileUploadResponse(path=path, error=str(e)))
-
+                results.append(FileUploadResponse(
+                    path=path, error=None if proc.returncode == 0 else "permission_denied",
+                ))
+            except Exception:
+                results.append(FileUploadResponse(path=path, error="permission_denied"))
         return results
 
     # ---------- 必须实现 4：下载文件 ----------
 
     def download_files(self, paths: list[str]) -> list[FileDownloadResponse]:
-        """从容器读出指定路径的文件字节。
-
-        参数
-        ----
-        paths : list[str]
-            容器内的绝对路径列表，例如 ["/home/agent/app/main.py"]
-
-        返回
-        ----
-        list[FileDownloadResponse]
-            与输入一一对应的结果列表。每个元素包含 path、content（bytes 或 None）
-            和可选的 error 字段。
-            支持部分成功：某个文件下载失败不影响其他文件，也不抛异常。
-
-        实现思路
-        --------
-        与 upload_files 对称：docker cp 只能拷到宿主机路径，
-        所以先 docker cp 到临时文件，再读出字节，最后清理临时文件。
-        """
+        """Read binary file contents as the container user, with per-file errors."""
         results: list[FileDownloadResponse] = []
-
+        reader = (
+            "import pathlib,sys; p=pathlib.Path(sys.argv[1]); "
+            "sys.exit(2) if not p.is_file() else sys.stdout.buffer.write(p.read_bytes())"
+        )
         for path in paths:
-            tmp_path = None
             try:
-                # 第一步：创建宿主机临时文件作为 docker cp 的目标
-                with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                    tmp_path = tmp.name
-
-                # 第二步：用 docker cp 把容器内文件拷到宿主机临时文件
-                cp = subprocess.run(
-                    ["docker", "cp", f"{self.container_id}:{path}", tmp_path],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
+                proc = subprocess.run(
+                    ["docker", "exec", self.container_id, "python", "-c", reader, path],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60,
                 )
-
-                if cp.returncode == 0:
-                    # 第三步：读出临时文件的全部字节内容
-                    with open(tmp_path, "rb") as f:
-                        data = f.read()
-                    results.append(FileDownloadResponse(path=path, content=data))
-                else:
-                    # docker cp 失败，通常是容器内文件不存在
-                    results.append(
-                        FileDownloadResponse(path=path, content=None, error="file_not_found")
-                    )
-
-            except Exception as e:  # noqa: BLE001
-                # 协议要求：部分成功，不抛异常
-                results.append(FileDownloadResponse(path=path, content=None, error=str(e)))
-
-            finally:
-                # 无论成功还是失败，都要清理宿主机上的临时文件
-                # finally 保证即使出异常也能执行清理
-                if tmp_path and os.path.exists(tmp_path):
-                    os.unlink(tmp_path)
-
+                error = None if proc.returncode == 0 else (
+                    "file_not_found" if proc.returncode == 2 else "permission_denied"
+                )
+                results.append(FileDownloadResponse(
+                    path=path, content=proc.stdout if error is None else None, error=error,
+                ))
+            except Exception:
+                results.append(FileDownloadResponse(path=path, content=None, error="permission_denied"))
         return results

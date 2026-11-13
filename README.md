@@ -1,5 +1,9 @@
 # Ibex
 
+最新运行、鉴权、持久工作区、投递恢复和完整部署验收见 [COMPLETION_REPORT.md](COMPLETION_REPORT.md)。本地新版网页为 http://127.0.0.1:18704/ ，所有业务 API 现在需要 `X-API-Key`；下文旧示例调用时也需添加该请求头。
+
+固定开发任务集与客观验收方法见 [eval/OBJECTIVE_EVAL.md](eval/OBJECTIVE_EVAL.md)。自动 CI 验证服务及评测器；真实模型评测通过手动工作流运行，不把单元测试通过率当成 Agent 任务成功率。
+
 > 一个开源、可自部署、多渠道接入的 **Dev 场景 Agent 工程框架**
 >
 > 把不可控的大模型，套进可控的 **Harness 工程骨架**

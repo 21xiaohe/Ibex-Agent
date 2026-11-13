@@ -6,12 +6,14 @@
 - 关闭时统一释放——资源生命周期完全归服务所有，绝不在请求里临时建连。
 """
 import os
+import asyncio
 from fastapi import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from obs.metrics import PrometheusMiddleware
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request, Depends
+from gateway.auth import authorize_request
+from fastapi.responses import JSONResponse, FileResponse
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.store.postgres import AsyncPostgresStore
 from infra.db import build_pg_pool
@@ -44,7 +46,8 @@ async def lifespan(app: FastAPI):
     await pool.open()
     logger.info("Postgres 连接池已打开")
 
-    await init_task_table(pool)
+    from infra.durable import init_durable_tables
+    await init_durable_tables(pool)
 
     # ③ 用同一个池构造异步 saver / store，并 setup（首次建表，幂等）
     checkpointer = AsyncPostgresSaver(pool)
@@ -73,11 +76,22 @@ async def lifespan(app: FastAPI):
         logger.info("连接池已释放")
 
 
-app = FastAPI(title="Ibex API", lifespan=lifespan)
+app = FastAPI(title="Ibex API", lifespan=lifespan, dependencies=[Depends(authorize_request)])
 app.include_router(issues_router)
 app.include_router(webhook_router)
 app.include_router(tasks_bg_router)
 app.include_router(jobs_router)
+from api.routes.chat import router as chat_router
+app.include_router(chat_router)
+from api.routes.deliveries import router as deliveries_router
+app.include_router(deliveries_router)
+
+
+@app.get("/", include_in_schema=False)
+async def web_ui() -> FileResponse:
+    """Serve the public sign-in page; every execution request still requires an API key."""
+    from pathlib import Path
+    return FileResponse(Path(__file__).resolve().parent.parent / "web" / "index.html")
 
 app.add_middleware(PrometheusMiddleware)          # 装 HTTP 采集中间件
 
@@ -115,11 +129,43 @@ async def healthz():
 
 
 # 健康检查：readiness（依赖就绪才 OK）
+READINESS_TIMEOUT = 3.0
+
+
+async def _probe_dependencies(pool, redis) -> None:
+    async with pool.connection(timeout=2) as conn:
+        await conn.execute("SELECT 1")
+    await redis.ping()
+
+
+def _consume_probe_result(task: asyncio.Task) -> None:
+    if not task.cancelled():
+        task.exception()
+
+
 @app.get("/readyz", response_model=HealthResponse)
 async def readyz(request: Request):
+    """Probe PostgreSQL and Redis with a bounded timeout before advertising readiness."""
     pool = getattr(request.app.state, "pg_pool", None)
     if pool is None:
         return JSONResponse(status_code=503, content={"status": "not_ready", "detail": "pool 未就绪"})
+    probe = getattr(request.app.state, "readiness_probe", None)
+    if probe is None or probe.done():
+        probe = asyncio.create_task(_probe_dependencies(pool, request.app.state.redis))
+        probe.add_done_callback(_consume_probe_result)
+        request.app.state.readiness_probe = probe
+    try:
+        if probe.cancelling():
+            raise TimeoutError
+        done, _ = await asyncio.wait({probe}, timeout=READINESS_TIMEOUT)
+        if not done:
+            # psycopg cancellation may itself wait for the unavailable server.
+            # Return promptly while one shared probe finishes its cleanup.
+            probe.cancel()
+            raise TimeoutError
+        probe.result()
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "not_ready", "detail": "dependency unavailable"})
     return HealthResponse(status="ready")
 
 @app.get("/metrics")                              # 普通路由，避开 app.mount 的 307
@@ -133,3 +179,10 @@ async def metrics():
     else:
         data = generate_latest()                  # 本地单进程：默认全局 registry
     return Response(content=data, media_type=CONTENT_TYPE_LATEST)
+
+
+from sandbox.workspace import WorkspaceBusy
+@app.exception_handler(WorkspaceBusy)
+async def workspace_busy(request: Request, exc: WorkspaceBusy) -> JSONResponse:
+    """A second writer must retry rather than overwrite a live conversation."""
+    return JSONResponse(status_code=409, content={"detail": str(exc)})

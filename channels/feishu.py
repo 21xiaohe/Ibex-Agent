@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import (
@@ -37,13 +38,14 @@ class FeishuChannel(ChannelAdapter):
             .build()
         )
 
-    async def send(self, conversation_id: str, text: str) -> None:
+    async def send(self, conversation_id: str, text: str, message_id: str | None = None) -> None:
         """把回复发回飞书会话（conversation_id = chat_id）。"""
         body = (
             CreateMessageRequestBody.builder()
             .receive_id(conversation_id)
             .msg_type("text")
             .content(json.dumps({"text": text}))   # 文本消息内容是 JSON 字符串
+            .uuid(message_id)
             .build()
         )
         req = (
@@ -52,6 +54,6 @@ class FeishuChannel(ChannelAdapter):
             .request_body(body)
             .build()
         )
-        resp = self._client.im.v1.message.create(req)
+        resp = await asyncio.to_thread(self._client.im.v1.message.create, req)
         if not resp.success():
-            logger.warning("飞书发消息失败：code={} msg={}", resp.code, resp.msg)
+            raise RuntimeError(f"Feishu message rejected: code={resp.code} msg={resp.msg}")

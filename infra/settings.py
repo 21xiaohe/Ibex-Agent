@@ -67,7 +67,16 @@ class Settings(BaseSettings):
 
     # 网关多租户（给 require_api_key / demo_12_test_gateway / demo_14_test_tenant 用）
     # 形如 {"key-tenant-a": "tenant-a", "key-tenant-b": "tenant-b"}
-    api_keys: dict[str, str] = {"key-tenant-a": "tenant-a", "key-tenant-b": "tenant-b"}
+    api_keys: dict[str, str] = {}
+    feishu_tenant_id: str = "feishu"
+    workspace_max_files: int = 500
+    workspace_max_bytes: int = 8_000_000
+    delivery_max_attempts: int = 6
+    delivery_retry_delay: float = 5.0
+    metrics_token: SecretStr = SecretStr("")
+    sandbox_owner: str = ""
+    daytona_snapshot: str = ""
+    daytona_prepare_dependencies: bool = True
 
     # =====沙箱隔离 =====
     sandbox_provider: str = "docker"  # docker（自托管）/ daytona（外部托管）/ none（本地退化，无沙箱）
@@ -78,6 +87,15 @@ class Settings(BaseSettings):
     sandbox_pids_limit: int = 256
     sandbox_cpus: str = "1.0"
     sandbox_pool_size: int = 4  # 沙箱池并发上限
+    sandbox_api_url: str = ""
+    sandbox_api_token: SecretStr = SecretStr("")
+    sandbox_idle_timeout: int = 1800
+    agent_team: bool = False
+    task_max_tries: int = 3
+    task_retry_delay: float = 2.0
+    task_timeout: int = 600
+    search_endpoint: str = "https://www.bing.com/search"
+    search_max_bytes: int = 1_000_000
 
     # =====并发与限流 =====
     max_concurrent_llm: int = 8  # LLM 并发调用上限

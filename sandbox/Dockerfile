@@ -2,7 +2,7 @@
 FROM python:3.13-slim
 
 # 预装测试/常用依赖，避免容器内断网现装
-RUN pip install --no-cache-dir pytest pytest-asyncio
+RUN pip install --no-cache-dir pytest pytest-asyncio fastapi httpx
 
 # 创建非 root 用户（uid 1000，与 docker run --user 1000:1000 对齐）
 RUN useradd -m -u 1000 agent

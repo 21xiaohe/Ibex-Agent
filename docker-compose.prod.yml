@@ -1,29 +1,63 @@
 # docker-compose.prod.yml —— 生产编排（web + worker + 飞书 + pg + redis + prometheus + grafana）
 services:
   web:                              # web 服务（Gunicorn 多 worker）
+    image: ibex-app:complete
     build: .
     # 端口映射用小众端口：宿主机 18700 → 容器内 8000。
     # 只改宿主机这一侧（左边），容器内仍是 8000（代码 bind 的、容器间访问的都不变）。
-    # 用 18700 这种非常见端口，能躲开公网对 8000/80/443 的批量扫描骚扰。
-    ports: ["18700:8000"]
+    # 默认仅回环访问；对外部署需另配网关鉴权。
+    ports: ["127.0.0.1:${IBEX_HTTP_PORT:-18700}:8000"]
     env_file: .env
-    depends_on: [postgres, redis]
+    environment:
+      IBEX_DATABASE_URL: postgresql://ibex:${IBEX_PG_PASSWORD:?Set IBEX_PG_PASSWORD}@postgres:5432/ibex
+      IBEX_REDIS_URL: redis://redis:6379/0
+      IBEX_SANDBOX_PROVIDER: docker
+      IBEX_SANDBOX_API_URL: http://sandbox:8003
+      IBEX_SANDBOX_API_TOKEN: ${IBEX_SANDBOX_API_TOKEN:?Set IBEX_SANDBOX_API_TOKEN}
+    depends_on: [postgres, redis, sandbox]
     restart: unless-stopped
     # 用 Dockerfile 默认 CMD（bash scripts/start_web.sh）
 
   worker:                           # arq 任务 worker（独立进程，可多开）
+    image: ibex-app:complete
     build: .                        # 同一个镜像
     command: ["arq", "tasks.worker.WorkerSettings"]   # pip 装在系统环境，直接用 arq（不是 uv run arq）
     env_file: .env
-    depends_on: [postgres, redis]
+    environment:
+      IBEX_DATABASE_URL: postgresql://ibex:${IBEX_PG_PASSWORD:?Set IBEX_PG_PASSWORD}@postgres:5432/ibex
+      IBEX_REDIS_URL: redis://redis:6379/0
+      IBEX_SANDBOX_PROVIDER: docker
+      IBEX_SANDBOX_API_URL: http://sandbox:8003
+      IBEX_SANDBOX_API_TOKEN: ${IBEX_SANDBOX_API_TOKEN:?Set IBEX_SANDBOX_API_TOKEN}
+    depends_on: [postgres, redis, sandbox]
     restart: unless-stopped
     # 教学用单 worker，不写 replicas（多副本指标抓取有坑，见 §2.5 提醒）
 
   feishu:                           # 飞书长连接接收端（如启用飞书渠道）
+    image: ibex-app:complete
     build: .
+    profiles: ["feishu"]
     command: ["python", "-m", "channels.feishu_ws"]   # 同上，直接用 python（不是 uv run python）
     env_file: .env
-    depends_on: [postgres, redis]
+    environment:
+      IBEX_DATABASE_URL: postgresql://ibex:${IBEX_PG_PASSWORD:?Set IBEX_PG_PASSWORD}@postgres:5432/ibex
+      IBEX_REDIS_URL: redis://redis:6379/0
+      IBEX_SANDBOX_PROVIDER: docker
+      IBEX_SANDBOX_API_URL: http://sandbox:8003
+      IBEX_SANDBOX_API_TOKEN: ${IBEX_SANDBOX_API_TOKEN:?Set IBEX_SANDBOX_API_TOKEN}
+    depends_on: [postgres, redis, sandbox]
+    restart: unless-stopped
+
+  sandbox:
+    image: ibex-app:complete
+    build: .
+    command: ["uvicorn", "sandbox.service:app", "--host", "0.0.0.0", "--port", "8003"]
+    environment:
+      IBEX_SANDBOX_API_TOKEN: ${IBEX_SANDBOX_API_TOKEN:?Set IBEX_SANDBOX_API_TOKEN}
+      IBEX_SANDBOX_IMAGE: ${IBEX_SANDBOX_IMAGE:-ibex-sandbox:local}
+      IBEX_API_KEY: broker-does-not-call-models
+      IBEX_SANDBOX_OWNER: ${COMPOSE_PROJECT_NAME:-ibex}
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
     restart: unless-stopped
 
   postgres:
@@ -36,24 +70,32 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis/redis-stack:latest
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
     volumes: ["redisdata:/data"]
     restart: unless-stopped
 
   prometheus:                       # 抓取指标
     image: prom/prometheus:latest
     volumes:
-      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    secrets: [sandbox_token, web_metrics_token]
     # 监控后台只绑本机回环 127.0.0.1，公网根本访问不到（比换端口更安全）。
     # 宿主机 127.0.0.1:19090 → 容器内 9090。要看 Prometheus 就 SSH 到服务器、走隧道访问（见 §2 提醒）。
-    ports: ["127.0.0.1:19090:9090"]
+    ports: ["127.0.0.1:${IBEX_PROMETHEUS_PORT:-19090}:9090"]
     restart: unless-stopped
 
   grafana:                          # 可视化看板
     image: grafana/grafana:latest
     # 同上：Grafana 也只绑本机回环，公网进不来。宿主机 127.0.0.1:13000 → 容器内 3000。
-    ports: ["127.0.0.1:13000:3000"]
-    volumes: ["grafanadata:/var/lib/grafana"]
+    ports: ["127.0.0.1:${IBEX_GRAFANA_PORT:-13000}:3000"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${IBEX_GRAFANA_PASSWORD:?Run prepare_deploy first}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on: [prometheus]
     restart: unless-stopped
 
@@ -61,3 +103,8 @@ volumes:
   pgdata:
   redisdata:
   grafanadata:
+secrets:
+  sandbox_token:
+    file: ./deploy/secrets/sandbox_token
+  web_metrics_token:
+    file: ./deploy/secrets/web_metrics_token

@@ -6,6 +6,7 @@
 运行：uv run python -m channels.cli --session mywork "帮我看下订单服务的定价逻辑"
 """
 import argparse
+import os
 import asyncio
 
 import httpx
@@ -13,24 +14,28 @@ import httpx
 BASE = "http://localhost:8000"
 
 
-async def ask(session: str, text: str) -> None:
-    async with httpx.AsyncClient(timeout=300) as client:
+async def ask(session: str, text: str, base_url: str = BASE, api_key: str | None = None) -> None:
+    """Send one request to the configured API endpoint and print the reply."""
+    async with httpx.AsyncClient(timeout=300, headers={"X-API-Key": api_key or os.environ.get("IBEX_CLIENT_API_KEY", "")}) as client:
         # 走通用 webhook 的 generic 入口（conversation_id=session 实现 CLI 续聊）
-        r = await client.post(f"{BASE}/webhook/generic", json={
+        r = await client.post(f"{base_url.rstrip('/')}/webhook/generic", json={
             "text": text,
             "source": "cli",
             "conversation_id": f"cli:{session}",
         })
+        r.raise_for_status()
         data = r.json()
         print("\nIbex:", data.get("reply", data))
 
 
-def main():
+def main() -> None:
+    """Parse the endpoint, conversation and user prompt."""
     p = argparse.ArgumentParser(description="Ibex CLI")
     p.add_argument("--session", default="default", help="会话名（同名续聊）")
+    p.add_argument("--base-url", default=BASE, help="Ibex API URL")
     p.add_argument("text", help="要对 Ibex 说的话")
     args = p.parse_args()
-    asyncio.run(ask(args.session, args.text))
+    asyncio.run(ask(args.session, args.text, args.base_url))
 
 
 if __name__ == "__main__":

@@ -1,0 +1,46 @@
+name: Regression tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: ibex
+          POSTGRES_PASSWORD: ibex
+          POSTGRES_DB: ibex
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ibex"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+    env:
+      IBEX_API_KEY: test-no-model-calls
+      IBEX_DATABASE_URL: postgresql://ibex:ibex@localhost:5432/ibex
+      IBEX_REDIS_URL: redis://localhost:6379/0
+      IBEX_SANDBOX_PROVIDER: docker
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m pytest tests tests_service -q --basetemp .pytest-ci --junitxml=logs/ci-pytest.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regression-results
+          path: logs/ci-pytest.xml

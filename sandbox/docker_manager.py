@@ -14,15 +14,17 @@ runtime 参数是隔离级别的旋钮：
 
 异步设计
 --------
-本模块使用 asyncio.create_subprocess_exec 管理容器生命周期。
+本模块异步管理容器生命周期；Windows Selector 循环使用线程执行子进程。
 这是应用自身的异步逻辑（区别于 DockerSandbox 的同步方法——
 后者由 BaseSandbox 通过 asyncio.to_thread 自动包装成异步）。
 """
 from __future__ import annotations
 import time
-from obs.metrics import SANDBOX_CREATE_DURATION
+from obs.metrics import SANDBOX_CREATE_DURATION, SANDBOX_ACTIVE
 import asyncio
 import uuid
+import subprocess
+import sys
 from pathlib import Path
 
 from infra.settings import get_settings          # 统一配置：镜像名、资源限制、runtime 等
@@ -30,6 +32,7 @@ from infra.logging import get_logger              # 结构化日志
 from sandbox.docker_sandbox import DockerSandbox  # 容器操作封装（execute / upload / download）
 
 logger = get_logger()
+_active_ids: set[str] = set()
 
 
 # ---------- 内部工具：异步执行外部命令 ----------
@@ -55,6 +58,12 @@ async def _run(cmd: list[str]) -> tuple[int, str]:
     stderr 合并到 stdout，简化调用方的错误处理——
     只需检查退出码 + 一段文本即可判断成败。
     """
+    if sys.platform == "win32":
+        # psycopg 要求 SelectorEventLoop；该循环不支持 asyncio 子进程。
+        result = await asyncio.to_thread(
+            subprocess.run, cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        )
+        return result.returncode, result.stdout.decode("utf-8", errors="replace")
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,       # 捕获标准输出
@@ -114,6 +123,7 @@ async def create_one_sandbox() -> DockerSandbox:
         "docker", "run",
         "-d",                                       # 后台运行（detached），不阻塞当前进程
         "--name", name,                             # 容器名，后续通过它操作容器
+        "--label", "ibex.owner=" + s.sandbox_owner,
 
         # -- 隔离级别 --
         "--runtime", s.sandbox_runtime,             # runc / runsc(gVisor) / kata(microVM)
@@ -163,6 +173,8 @@ async def create_one_sandbox() -> DockerSandbox:
     SANDBOX_CREATE_DURATION.observe(time.perf_counter() - start)
 
     # 返回 DockerSandbox 实例，后续所有操作都通过它进行
+    _active_ids.add(name)
+    SANDBOX_ACTIVE.inc()
     return DockerSandbox(container_id=name, workdir=workdir)
 
 
@@ -199,35 +211,21 @@ async def seed_project(
     # 若未指定项目根，则自动推断：本文件 -> sandbox/ -> 项目根/
     root = root or Path(__file__).resolve().parent.parent
 
-    cid = sandbox.container_id   # 容器 ID / 名称
-    workdir = sandbox.workdir    # 容器内工作目录（如 /home/agent）
-
-    # 拷贝子目录
-    # docker cp 会把整个目录递归拷进容器
-    # 例如：docker cp /project/app  syc-sbx-xxxx:/home/agent/app
+    files: list[tuple[str, bytes]] = []
     for sub in subdirs:
-        p = root / sub
-        if p.exists():
-            await _run(["docker", "cp", str(p), f"{cid}:{workdir}/{sub}"])
-        # 不存在的目录静默跳过——不是所有项目都有全部子目录
-
-    # 拷贝额外单文件
-    # 例如：docker cp /project/AGENTS.md  syc-sbx-xxxx:/home/agent/AGENTS.md
-    for f in extra_files:
-        fp = root / f
-        if fp.is_file():
-            await _run(["docker", "cp", str(fp), f"{cid}:{workdir}/{f}"])
-
-    # 修正文件属主
-    # docker cp 拷进来的文件属主默认是 root:root，
-    # 但容器内进程以 uid=1000 运行（见 create_one_sandbox 的 --user 参数），
-    # 如果不 chown，agent 进程将无法修改这些文件（Permission denied）。
-    #
-    # -u 0 : 以 root 身份执行 chown（容器内普通用户没权限改属主）
-    # -R   : 递归修改整个工作目录下所有文件和子目录的属主为 1000:1000
-    await _run(["docker", "exec", "-u", "0", cid, "chown", "-R", "1000:1000", workdir])
-
-    logger.info("项目已 seed 进容器 {}", cid)
+        directory = root / sub
+        if directory.is_dir():
+            for path in directory.rglob("*"):
+                if path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc":
+                    files.append((f"{sandbox.workdir}/{path.relative_to(root).as_posix()}", path.read_bytes()))
+    for name in extra_files:
+        path = root / name
+        if path.is_file():
+            files.append((f"{sandbox.workdir}/{name}", path.read_bytes()))
+    results = await asyncio.to_thread(sandbox.upload_files, files)
+    if len(results) != len(files) or any(item.error for item in results):
+        raise RuntimeError("Sandbox project initialization failed")
+    logger.info("Project initialized in {} ({} files)", sandbox.container_id, len(files))
 
 
 # ---------- 核心 API 3：销毁沙箱容器 ----------
@@ -243,41 +241,65 @@ async def destroy_sandbox(sandbox: DockerSandbox) -> None:
       这既是安全特性（防泄漏），也简化了清理逻辑。
     - 幂等性：如果容器已经不存在（如被手动清理），docker rm -f 会静默成功，不报错。
     """
-    await _run(["docker", "rm", "-f", sandbox.container_id])
+    code, output = await _run(["docker", "rm", "-f", sandbox.container_id])
+    if code and "No such container" not in output:
+        raise RuntimeError("Sandbox removal failed")
+    if sandbox.container_id in _active_ids:
+        _active_ids.remove(sandbox.container_id)
+        SANDBOX_ACTIVE.dec()
     logger.info("容器已销毁：{}", sandbox.container_id)
 
 
 # sandbox/docker_manager.py（追加：只读 reviewer 用的沙箱）
 async def create_readonly_sandbox(source_sandbox: DockerSandbox) -> DockerSandbox:
-    """给 reviewer 起一个只读容器：把 source_sandbox 的工作目录内容复制进来后设为只读。
-
-    实现：① 起一个新容器；② 从源容器把代码 cp 出来再 cp 进新容器；
-         ③ 在新容器内 chmod -R a-w 工作目录,使 execute 跑 echo>file 也写不进。
-    这样 reviewer 即使用 execute 也改不了代码——靠文件系统权限,不靠 prompt。
-    """
-    import tempfile
+    """Create a root-owned snapshot that the agent cannot write, rename or chmod."""
     s = get_settings()
     name = f"syc-ro-{uuid.uuid4().hex[:12]}"
-    workdir = s.sandbox_workdir
+    workdir = source_sandbox.workdir
     code, out = await _run([
         "docker", "run", "-d", "--name", name,
-        "--runtime", s.sandbox_runtime,
-        "--network", "none", "--cap-drop", "ALL",
+        "--label", "ibex.owner=" + s.sandbox_owner,
+        "--runtime", s.sandbox_runtime, "--network", "none", "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges", "--read-only",
-        "--tmpfs", f"{workdir}:rw,exec,size=512m,uid=1000",
+        "--tmpfs", f"{workdir}:rw,exec,size=512m,uid=0,gid=0,mode=755",
+        "--tmpfs", "/tmp:rw,size=128m,uid=1000",
         "--memory", s.sandbox_mem_limit, "--memory-swap", s.sandbox_mem_limit,
         "--pids-limit", str(s.sandbox_pids_limit), "--cpus", s.sandbox_cpus,
-        "--user", "1000:1000", "-w", workdir,
-        s.sandbox_image, "sleep", "infinity",
+        "--user", "1000:1000", "-w", workdir, s.sandbox_image, "sleep", "infinity",
     ])
     if code != 0:
-        raise RuntimeError(f"起只读沙箱失败：{out}")
-    ro = DockerSandbox(container_id=name, workdir=workdir)
-    # 把源容器代码搬进来(经宿主中转),然后把工作目录设为不可写
-    with tempfile.TemporaryDirectory() as tmpd:
-        await _run(["docker", "cp", f"{source_sandbox.container_id}:{workdir}/.", tmpd])
-        await _run(["docker", "cp", f"{tmpd}/.", f"{name}:{workdir}"])
-    # chmod 去掉写位(用 root 改,因为非 root 改不动自己没权限的位)
-    await _run(["docker", "exec", "-u", "0", name, "chmod", "-R", "a-w", workdir])
-    logger.info("只读 reviewer 沙箱已起：{}", name)
-    return ro
+        raise RuntimeError(f"Readonly sandbox creation failed: {out}")
+    _active_ids.add(name)
+    SANDBOX_ACTIVE.inc()
+    readonly = DockerSandbox(container_id=name, workdir=workdir)
+    exporter = """import io,pathlib,sys,tarfile
+root=pathlib.Path(sys.argv[1])
+with tarfile.open(fileobj=sys.stdout.buffer,mode='w|') as archive:
+    for path in root.rglob('*'):
+        if path.is_file() and not path.is_symlink():
+            data=path.read_bytes()
+            info=tarfile.TarInfo(path.relative_to(root).as_posix())
+            info.size=len(data)
+            archive.addfile(info,io.BytesIO(data))
+"""
+    importer = """import os,pathlib,sys,tarfile
+root=pathlib.Path(sys.argv[1])
+with tarfile.open(fileobj=sys.stdin.buffer,mode='r|') as archive:
+    archive.extractall(root,filter='data')
+for directory,dirs,files in os.walk(root,topdown=False):
+    for name in files: os.chmod(pathlib.Path(directory)/name,0o444)
+    os.chmod(directory,0o555)
+"""
+    try:
+        exported = await asyncio.to_thread(
+            subprocess.run, ["docker", "exec", source_sandbox.id, "python", "-c", exporter, workdir],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=60,
+        )
+        await asyncio.to_thread(
+            subprocess.run, ["docker", "exec", "-i", "-u", "0", name, "python", "-c", importer, workdir],
+            input=exported.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=60,
+        )
+        return readonly
+    except BaseException:
+        await destroy_sandbox(readonly)
+        raise

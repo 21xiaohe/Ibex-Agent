@@ -8,7 +8,7 @@ import json
 import statistics
 from datetime import datetime, timezone
 
-from agent.main import build_agent
+from agent.main import build_agent_for_service
 from eval.dataset import EVAL_CASES               # 开放题（domain/safety/general）
 from eval.code_cases import CODE_EVAL_CASES       # 编码题（exec）
 from eval.judge import judge_answer
@@ -21,32 +21,45 @@ BASELINE_FILE = "eval/baseline.json"
 
 async def _llm_judge_scorer(agent, case: dict) -> dict:
     """开放题：调 agent 回答 → LLM 裁判打分。"""
-    result = await agent.ainvoke(
-        {"messages": [{"role": "user", "content": case["input"]}]},
-        config={"configurable": {"thread_id": f"eval-{case['id']}"}},
-    )
-    answer = result["messages"][-1].content if result.get("messages") else ""
-    v = await judge_answer(case["input"], case["criteria"], answer)
-    return {"score": v["score"]}
+    from uuid import uuid4
+    from sandbox.lifecycle import release_backend as destroy_sandbox
+    instance, sandbox = await agent()
+    try:
+        result = await instance.ainvoke(
+            {"messages": [{"role": "user", "content": case["input"]}]},
+            config={"configurable": {"thread_id": f"eval-{case['id']}-{uuid4().hex}"}, "recursion_limit": 40},
+        )
+        answer = result["messages"][-1].content if result.get("messages") else ""
+        verdict = await judge_answer(case["input"], case["criteria"], answer)
+        return {**verdict, "answer": answer}
+    finally:
+        if sandbox is not None:
+            await destroy_sandbox(sandbox)
 
 
 async def _eval_repeated(agent, sem, case, scorer) -> dict:
     """一条用例跑 N 次，报均值 ± 标准差。"""
     scores = []
+    samples = []
     for _ in range(_REPEATS):
         async with sem:
-            r = await scorer(agent, case)
+            try:
+                r = await asyncio.wait_for(scorer(agent, case), timeout=240)
+            except Exception as error:
+                r = {"score": 0.0, "error": type(error).__name__}
             scores.append(r["score"])
+            samples.append(r)
     return {
         "id": case["id"], "category": case["category"],
         "mean": statistics.mean(scores),
         "std": statistics.pstdev(scores) if len(scores) > 1 else 0.0,
-        "scores": scores,
+        "scores": scores, "samples": samples,
     }
 
 
-async def main():
-    agent = build_agent()
+async def main() -> int:
+    """Run every case and return a failing exit status when the baseline regresses."""
+    agent = build_agent_for_service
     sem = asyncio.Semaphore(_CONCURRENCY)
 
     tasks = []
@@ -59,6 +72,10 @@ async def main():
 
     print(f"开始 Eval：{len(CODE_EVAL_CASES)} 编码题 + {len(EVAL_CASES)} 开放题，每条 {_REPEATS} 次\n")
     results = await asyncio.gather(*tasks)
+    from pathlib import Path
+    output = Path("logs/full-eval-results.json")
+    output.parent.mkdir(exist_ok=True)
+    output.write_text(json.dumps({"repeats": _REPEATS, "results": results}, ensure_ascii=False, indent=2), encoding="utf-8")
 
     for r in results:
         flag = "⚠️ 不稳定" if r["std"] > 0.2 else ""
@@ -80,6 +97,7 @@ async def main():
     print(f"\n总体均值：{overall}")
 
     # 基线对比：退化判定 = 本次均值 < 基线均值 − 噪声带（掉出噪声范围才算真退化）
+    regressed = False
     try:
         with open(BASELINE_FILE, encoding="utf-8") as f:
             base = json.load(f)
@@ -103,7 +121,11 @@ async def main():
                        "saved_at": datetime.now(timezone.utc).isoformat()},
                       f, ensure_ascii=False, indent=2)
         print(f"\n（首次运行，已存为基线 → {BASELINE_FILE}）")
+    return 1 if regressed else 0
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import sys
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    raise SystemExit(asyncio.run(main()))

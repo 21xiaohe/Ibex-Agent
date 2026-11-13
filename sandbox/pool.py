@@ -30,9 +30,11 @@ class SandboxPool:
             await seed_project(sandbox)            # 池内部 seed 好
             yield sandbox, sandbox.workdir         # ← 交回可用上下文
         finally:
-            if sandbox is not None:
-                await destroy_sandbox(sandbox)     # 用完即弃：销毁,不复用、不串数据
-            self._sem.release()
+            try:
+                if sandbox is not None:
+                    await destroy_sandbox(sandbox)
+            finally:
+                self._sem.release()
 
 
 _pool: SandboxPool | None = None
