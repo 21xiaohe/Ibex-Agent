@@ -4,6 +4,10 @@
 
 固定开发任务集与客观验收方法见 [eval/OBJECTIVE_EVAL.md](eval/OBJECTIVE_EVAL.md)。自动 CI 验证服务及评测器；真实模型评测通过手动工作流运行，不把单元测试通过率当成 Agent 任务成功率。
 
+新版飞书、固定任务集实测结果及 GitHub CI 状态见 [FOLLOWUP_REPORT.md](FOLLOWUP_REPORT.md)。
+
+当前小规模客观基线为 **1/12 次任务完全通过（8.3%）**，尚未达到模型质量门槛。服务回归测试与真实飞书链路已通过，两类结果不混用。
+
 > 一个开源、可自部署、多渠道接入的 **Dev 场景 Agent 工程框架**
 >
 > 把不可控的大模型，套进可控的 **Harness 工程骨架**
@@ -22,7 +26,7 @@
 
 > **主进程调度、沙箱执行、密钥绝不进沙箱。**
 
-Ibex 基于 **DeepAgents + LangGraph** 构建，以 **Agent Harness（智能体工程骨架）** 为核心理念，落地了一个真实可用的研发助手：它能在隔离沙箱里看代码、改 Issue、跑测试，并通过飞书 / Web / CLI / Webhook 多渠道为团队提供服务，覆盖 Agent 工程从 **构建 → 隔离 → 多渠道接入 → 异步化 → 多租户治理 → 可观测 → 评估 → 压测 → 部署上线** 的完整生产链路。
+Ibex 基于 **DeepAgents + LangGraph** 构建研发助手：在隔离沙箱里读取、修改代码并运行测试，通过飞书 / Web / CLI / Webhook 接入，提供持久任务、租户隔离、文件恢复和监控。服务验证结果与模型任务质量分别记录；当前没有生产 SLA 或并发容量结论。
 
 ## 核心特性
 
@@ -30,7 +34,7 @@ Ibex 基于 **DeepAgents + LangGraph** 构建，以 **Agent Harness（智能体�
 
 - **主 Agent + 多 Subagent 协作**：Coder / Reviewer / Researcher 分工，基于 DeepAgents 原生路由
 - **AgentMiddleware 中间件链**：请求上下文 → 工具审计 → 成本计量 → LLM 并发限制 → 模型 fallback
-- **物理只读 Reviewer**：`FilesystemPermission` 机制层强约束，**不靠 prompt 自律**
+- **只读 Reviewer**：Docker 使用独立只读快照容器；Daytona 使用受限文件快照并禁用执行工具，具体实现见 `sandbox/readonly.py`
 
 ### 沙箱隔离三档可插拔
 
@@ -40,7 +44,7 @@ Ibex 基于 **DeepAgents + LangGraph** 构建，以 **Agent Harness（智能体�
 | **L2 gVisor** | `runsc` 用户态内核 | 多租户、有限可信 |
 | **L3 microVM** | `kata` + Firecracker | 生产、完全不可信代码 |
 
-**换一个 `--runtime` 配置即换隔离级别，上层代码不动。**
+通过 runtime 配置选择已在宿主机安装的运行时。目前实测的是标准 Docker；gVisor/Kata 尚未实测。
 
 ### 多渠道统一接入
 
@@ -53,11 +57,11 @@ Ibex 基于 **DeepAgents + LangGraph** 构建，以 **Agent Harness（智能体�
 
 **渠道差异收敛在适配器，业务核心只认 `InboundMessage` 统一请求。**
 
-### 异步任务编排（双方案）
+### 持久任务与消息投递
 
-- **方案一**：`BackgroundTasks + 任务状态表`——轻量、零新增组件
-- **方案二**：`arq + Redis` 队列——生产级、独立扩展 worker、可靠重试
-- **HITL 人在回路**：`interrupt_on + Command(resume)` 实现危险动作人工审批
+- `/tasks` 与 `/jobs` 统一使用 PostgreSQL 任务记录及 arq/Redis 队列；发布失败后扫描补发。
+- 模型结果与 Outbox 在同一事务保存；发送失败独立重试，耗尽后可查询和手动重投。
+- **HITL 人在回路**：保留独立机制演示和测试；尚未接入服务端审批/恢复 API。
 
 ### API 网关与多租户治理
 
@@ -65,17 +69,17 @@ Ibex 基于 **DeepAgents + LangGraph** 构建，以 **Agent Harness（智能体�
 - SlowAPI 按租户分桶限流（Redis 多副本共享）
 - Redis `SETNX + TTL` 原子幂等去重
 
-### 完整可观测体系
+### 可观测性
 
 - **两层指标埋点**：HTTP 层 RED + Agent 层成本/Token/任务耗时
 - **Prometheus 多进程聚合**：正确处理 Gunicorn 多 worker 指标
-- **LangSmith 追踪**：Agent 内部决策链路全可见
+- **LangSmith 追踪**：可配置启用；本轮未重新验证远端追踪
 
 ### 质量保障闭环
 
-- **Eval 评估**：客观评分（沙箱 pytest 0/1）+ LLM 裁判 + 方差处理（均值±std）
-- **可作 CI 质量门禁**：Eval 退化即拒绝发版
-- **Locust 压测**：分位数延迟分析 + 容量规划
+- **固定客观评测**：6 类开发任务、独立断言、完整失败记录；与原 LLM 裁判评测分开报告。
+- **CI**：自动运行不调用模型的服务回归；手动模型评测默认要求全部试次通过，否则工作流失败。尚未绑定正式发布流程。
+- **Locust**：提供 readiness 与可选真实 Agent 场景；尚未给出容量和延迟指标。
 
 ## 🏗 项目架构
 
@@ -304,7 +308,7 @@ compose 自带 Prometheus + Grafana：HTTP 层 QPS / 错误率 / 延迟 P99，�
 
 贯穿整个项目的几条工程信念：
 
-1. **机制优先于提示词**：Reviewer 只读不靠"你不要改"的 prompt，靠 `FilesystemPermission` deny-write 机制
+1. **机制优先于提示词**：Reviewer 通过独立只读快照和受限工具访问项目
 2. **密钥绝不进沙箱**：主进程持有密钥，沙箱拿到的是短期 token 或代理后的接口
 3. **Eval 是 CI 的质量门禁**：不能量化的能力等于不存在；Agent 退化必须能在发版前被拦下
 4. **先单进程做对，再多副本扩展**：不要为了"显得分布式"上 RabbitMQ/K8s；Redis + arq 足够支撑你需要的复杂度
@@ -313,9 +317,11 @@ compose 自带 Prometheus + Grafana：HTTP 层 QPS / 错误率 / 延迟 P99，�
 
 ## Roadmap
 
-- [ ] Grafana Dashboard as Code（随项目附带 JSON，一键导入）
+- [x] Grafana Dashboard as Code（随项目附带 JSON 与自动配置）
 - [ ] L2 gVisor / L3 Kata 沙箱档位实测文档
-- [ ] Eval 质量门禁接入 GitHub Actions
+- [x] 固定任务评测接入手动 GitHub Actions，保留失败产物
+- [ ] 把模型质量门禁接入正式发布流程
+- [ ] 服务端人工审批与恢复 API
 
 ## License
 

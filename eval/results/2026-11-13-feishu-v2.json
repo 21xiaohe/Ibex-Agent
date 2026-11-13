@@ -1,0 +1,10 @@
+{
+  "state": "passed",
+  "trigger": "IBEX_VERIFY_V2",
+  "expected_reply": "IBEX_FEISHU_V2_OK",
+  "model_reply_exact": true,
+  "execution_attempts": 1,
+  "delivery_status": "sent",
+  "delivery_attempts": 1,
+  "provider_accepted": true
+}

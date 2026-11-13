@@ -1,0 +1,338 @@
+{
+  "suite": "ibex-dev-v1",
+  "suite_sha256": "93b91aa0506cd06c1abf72a2ab1136487afd6fed5fff151ca11e585941327981",
+  "config": {
+    "model": "qwen-max",
+    "provider": "openai",
+    "sandbox": "docker",
+    "team": false,
+    "temperature": 0,
+    "timeout_seconds": 300.0,
+    "repeats": 2
+  },
+  "runner_sha256": "96fccc8e3552d0efff64d13ab3be6d6df1c13bab0dfbc9c32bad95228c1e4e60",
+  "started_at": "2026-11-13T13:33:22.478434+00:00",
+  "samples": [
+    {
+      "id": "money-total",
+      "category": "decimal",
+      "passed": false,
+      "acceptance": [
+        {
+          "name": "test_basic",
+          "passed": true
+        },
+        {
+          "name": "test_empty_and_round_once",
+          "passed": true
+        },
+        {
+          "name": "test_precision",
+          "passed": true
+        },
+        {
+          "name": "test_invalid",
+          "passed": false,
+          "error": "InvalidOperation"
+        },
+        {
+          "name": "test_no_mutation",
+          "passed": true
+        }
+      ],
+      "exit_code": 1,
+      "detail": "IBEX_ACCEPTANCE=[{\"name\": \"test_basic\", \"passed\": true}, {\"name\": \"test_empty_and_round_once\", \"passed\": true}, {\"name\": \"test_precision\", \"passed\": true}, {\"name\": \"test_invalid\", \"passed\": false, \"error\": \"InvalidOperation\"}, {\"name\": \"test_no_mutation\", \"passed\": true}]\n",
+      "artifact": "from decimal import Decimal, ROUND_HALF_UP, InvalidOperation\ndef calc_total(items: list[dict]) -> str:\n    \"\"\"\n    Calculate the total price of items in the cart.\n\n    :param items: List of items, each with 'price' (nonnegative finite decimal string) and 'qty' (nonnegative int).\n    :return: The sum of all item prices, rounded to 2 decimals with ROUND_HALF_UP. Empty list returns '0.00'.\n    :raises ValueError: If any item has an invalid price or qty.\n    \"\"\"\n    if not items:\n        return '0.00'\n    \n    total = Decimal('0')\n    for item in items:\n        if not isinstance(item['price'], str) or not isinstance(item['qty'], int):\n            raise ValueError('Invalid price or quantity.')\n        try:\n            price = Decimal(item['price'])\n        except InvalidOperation:\n            raise ValueError('Invalid price format.')\n        \n        if price < 0 or item['qty'] < 0:\n            raise ValueError('Price and quantity must be nonnegative.')\n        \n        total += price * item['qty']\n    \n    return str(total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))",
+      "static_advisory": {
+        "no_float_money": true,
+        "has_type_hints": true
+      },
+      "input_tokens": 116239,
+      "output_tokens": 2272,
+      "tool_calls": 18,
+      "elapsed_seconds": 96.673,
+      "repeat": 1
+    },
+    {
+      "id": "discount-rounding",
+      "category": "decimal",
+      "passed": false,
+      "acceptance": [
+        {
+          "name": "test_discount",
+          "passed": true
+        },
+        {
+          "name": "test_rounding",
+          "passed": true
+        },
+        {
+          "name": "test_bounds",
+          "passed": true
+        },
+        {
+          "name": "test_invalid",
+          "passed": false,
+          "error": "InvalidOperation"
+        }
+      ],
+      "exit_code": 1,
+      "detail": "IBEX_ACCEPTANCE=[{\"name\": \"test_discount\", \"passed\": true}, {\"name\": \"test_rounding\", \"passed\": true}, {\"name\": \"test_bounds\", \"passed\": true}, {\"name\": \"test_invalid\", \"passed\": false, \"error\": \"InvalidOperation\"}]\n",
+      "artifact": "from decimal import Decimal, ROUND_HALF_UP\n\ndef apply_discount(amount: str, rate: str) -> str:\n    if not (0 <= Decimal(rate) <= 1):\n        raise ValueError('Rate must be a fraction between 0 and 1 inclusive.')\n    if Decimal(amount) < 0:\n        raise ValueError('Amount must be nonnegative.')\n    try:\n        discounted_amount = Decimal(amount) * (1 - Decimal(rate))\n    except Exception as e:\n        raise ValueError('Invalid input: ' + str(e))\n    return str(discounted_amount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))",
+      "static_advisory": {
+        "no_float_money": true,
+        "has_type_hints": true
+      },
+      "input_tokens": 68377,
+      "output_tokens": 1402,
+      "tool_calls": 8,
+      "elapsed_seconds": 44.814,
+      "repeat": 1
+    },
+    {
+      "id": "pagination-bugfix",
+      "category": "bugfix",
+      "passed": true,
+      "acceptance": [
+        {
+          "name": "test_first_last",
+          "passed": true
+        },
+        {
+          "name": "test_empty_and_beyond",
+          "passed": true
+        },
+        {
+          "name": "test_invalid",
+          "passed": true
+        },
+        {
+          "name": "test_no_mutation",
+          "passed": true
+        }
+      ],
+      "exit_code": 0,
+      "detail": "IBEX_ACCEPTANCE=[{\"name\": \"test_first_last\", \"passed\": true}, {\"name\": \"test_empty_and_beyond\", \"passed\": true}, {\"name\": \"test_invalid\", \"passed\": true}, {\"name\": \"test_no_mutation\", \"passed\": true}]\n",
+      "artifact": "import math\n\ndef paginate(items: list, page: int, size: int) -> dict:\n    if not isinstance(page, int) or not isinstance(size, int):\n        raise ValueError('page and size must be integers')\n    if isinstance(page, bool) or isinstance(size, bool):\n        raise ValueError('page and size must be integers')\n    if not (1 <= size <= 100):\n        raise ValueError('size must be between 1 and 100')\n    if page < 1:\n        raise ValueError('page must be at least 1')\n    total = len(items)\n    pages = math.ceil(total / size) if total > 0 else 0\n    start = (page - 1) * size\n    end = start + size\n    paged_items = items[start:end] if 0 <= start < total else []\n    return {'items': paged_items, 'total': total, 'pages': pages}\n",
+      "static_advisory": {
+        "no_float_money": true,
+        "has_type_hints": true
+      },
+      "input_tokens": 89674,
+      "output_tokens": 2122,
+      "tool_calls": 13,
+      "elapsed_seconds": 78.431,
+      "repeat": 1
+    },
+    {
+      "id": "idempotent-events",
+      "category": "state",
+      "passed": false,
+      "acceptance": [
+        {
+          "name": "test_dedup",
+          "passed": true
+        },
+        {
+          "name": "test_conflict",
+          "passed": true
+        },
+        {
+          "name": "test_invalid_not_reserved",
+          "passed": false,
+          "error": "InvalidOperation"
+        },
+        {
+          "name": "test_independent_and_round_once",
+          "passed": true
+        }
+      ],
+      "exit_code": 1,
+      "detail": "IBEX_ACCEPTANCE=[{\"name\": \"test_dedup\", \"passed\": true}, {\"name\": \"test_conflict\", \"passed\": true}, {\"name\": \"test_invalid_not_reserved\", \"passed\": false, \"error\": \"InvalidOperation\"}, {\"name\": \"test_independent_and_round_once\", \"passed\": true}]\n",
+      "artifact": "from decimal import Decimal, ROUND_HALF_UP, InvalidOperation\n\nclass EventLedger:\n    def __init__(self):\n        self.events = {}\n        self.balance = Decimal('0.00')\n\n    def apply(self, event_id: str, amount: str) -> bool:\n        if not event_id or not amount:\n            raise ValueError('Event ID and amount must be non-empty strings.')\n\n        try:\n            amount_decimal = Decimal(amount)\n        except (InvalidOperation, TypeError):\n            raise ValueError('Amount must be a valid decimal number.')\n\n        if amount_decimal < 0 or not amount_decimal.is_finite():\n            raise ValueError('Amount must be a nonnegative finite decimal.')\n\n        if event_id in self.events:\n            if self.events[event_id] == amount_decimal:\n                return False  # Exact duplicate\n            else:\n                raise ValueError('Event ID reused with a different amount.')\n\n        self.events[event_id] = amount_decimal\n        self.balance += amount_decimal\n        return True\n\n    def total(self) -> str:\n        return str(self.balance.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))",
+      "static_advisory": {
+        "no_float_money": true,
+        "has_type_hints": false
+      },
+      "input_tokens": 310658,
+      "output_tokens": 3462,
+      "tool_calls": 31,
+      "elapsed_seconds": 138.236,
+      "repeat": 1
+    },
+    {
+      "id": "fastapi-validation",
+      "category": "api",
+      "passed": false,
+      "error_type": "GraphRecursionError",
+      "elapsed_seconds": 124.696,
+      "repeat": 1
+    },
+    {
+      "id": "retry-boundaries",
+      "category": "resilience",
+      "passed": false,
+      "acceptance": [
+        {
+          "name": "test_eventual_success",
+          "passed": true
+        },
+        {
+          "name": "test_no_retry_other_error",
+          "passed": true
+        },
+        {
+          "name": "test_exhaustion",
+          "passed": true
+        },
+        {
+          "name": "test_config_before_execution",
+          "passed": false,
+          "error": "AssertionError"
+        }
+      ],
+      "exit_code": 1,
+      "detail": "IBEX_ACCEPTANCE=[{\"name\": \"test_eventual_success\", \"passed\": true}, {\"name\": \"test_no_retry_other_error\", \"passed\": true}, {\"name\": \"test_exhaustion\", \"passed\": true}, {\"name\": \"test_config_before_execution\", \"passed\": false, \"error\": \"AssertionError\"}]\n",
+      "artifact": "import time\nimport math\nfrom typing import Callable, Type, Union\n\n\ndef retry_call(\n    operation: Callable[[], None],\n    *,\n    attempts: int = 3,\n    base_delay: float = 0.1,\n    sleep: Callable[[float], None] = time.sleep\n) -> None:\n    \"\"\"\n    Calls the provided operation. If the operation raises a ConnectionError or TimeoutError, it will be retried.\n    \n    Args:\n        operation (Callable[[], None]): The operation to call. It should not take any arguments and return None.\n        attempts (int, optional): The maximum number of attempts to make. Defaults to 3. Must be a positive integer.\n        base_delay (float, optional): The base delay in seconds before the first retry. Each subsequent retry will wait\n            twice as long as the previous one. Defaults to 0.1. Must be finite and non-negative.\n        sleep (Callable[[float], None], optional): A callable that takes a single argument (number of seconds to sleep)\n            and is used to pause execution. This is primarily for testing purposes. Defaults to time.sleep.\n    \n    Raises:\n        ValueError: If 'attempts' is not a positive integer or if 'base_delay' is not finite and non-negative.\n        ConnectionError: If the operation fails with a ConnectionError after all retries are exhausted.\n        TimeoutError: If the operation fails with a TimeoutError after all retries are exhausted.\n    \"\"\"\n    if not isinstance(attempts, int) or attempts <= 0:\n        raise ValueError(\"'attempts' must be a positive integer.\")\n    if not (isinstance(base_delay, (int, float)) and base_delay >= 0 and not math.isinf(base_delay)):\n        raise ValueError(\"'base_delay' must be finite and non-negative.\")\n\n    for i in range(attempts):\n        try:\n            return operation()\n        except (ConnectionError, TimeoutError) as e:\n            if i < attempts - 1:\n                sleep(base_delay * 2 ** i)\n            else:\n                raise e",
+      "static_advisory": {
+        "no_float_money": true,
+        "has_type_hints": true
+      },
+      "input_tokens": 61412,
+      "output_tokens": 2319,
+      "tool_calls": 8,
+      "elapsed_seconds": 67.355,
+      "repeat": 1
+    },
+    {
+      "id": "money-total",
+      "category": "decimal",
+      "passed": false,
+      "error_type": "TimeoutError",
+      "elapsed_seconds": 300.153,
+      "repeat": 2
+    },
+    {
+      "id": "discount-rounding",
+      "category": "decimal",
+      "passed": false,
+      "error_type": "GraphRecursionError",
+      "elapsed_seconds": 224.441,
+      "repeat": 2
+    },
+    {
+      "id": "pagination-bugfix",
+      "category": "bugfix",
+      "passed": false,
+      "acceptance": [],
+      "exit_code": 1,
+      "detail": "Traceback (most recent call last):\n  File \"<string>\", line 9, in <module>\n    fn()\n    ~~^^\n  File \"<string>\", line 11, in test_invalid\n  File \"/usr/local/lib/python3.13/site-packages/_pytest/raises.py\", line 699, in __exit__\n    fail(f\"DID NOT RAISE {self.expected_exceptions[0].__name__}\")\n    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/site-packages/_pytest/outcomes.py\", line 162, in __call__\n    raise Failed(msg=reason, pytrace=pytrace)\nFailed: DID NOT RAISE ValueError\n",
+      "artifact": "import math\n\ndef paginate(items: list, page: int, size: int) -> dict:\n    \"\"\"Return a page, currently with indexing and validation bugs.\"\"\"\n    if not isinstance(page, int) or not isinstance(size, int):\n        raise ValueError('Page and size must be integers.')\n    if not 1 <= size <= 100:\n        raise ValueError('Size must be between 1 and 100.')\n    if page < 1:\n        raise ValueError('Page must be at least 1.')\n\n    total = len(items)\n    pages = math.ceil(total / size) if total > 0 else 0\n    start_index = (page - 1) * size\n    end_index = min(start_index + size, total)\n    paged_items = items[start_index:end_index]\n\n    return {'items': paged_items, 'total': total, 'pages': pages}\n",
+      "static_advisory": {
+        "no_float_money": true,
+        "has_type_hints": true
+      },
+      "input_tokens": 235312,
+      "output_tokens": 2033,
+      "tool_calls": 20,
+      "elapsed_seconds": 86.878,
+      "repeat": 2
+    },
+    {
+      "id": "idempotent-events",
+      "category": "state",
+      "passed": false,
+      "acceptance": [
+        {
+          "name": "test_dedup",
+          "passed": true
+        },
+        {
+          "name": "test_conflict",
+          "passed": true
+        },
+        {
+          "name": "test_invalid_not_reserved",
+          "passed": false,
+          "error": "InvalidOperation"
+        },
+        {
+          "name": "test_independent_and_round_once",
+          "passed": true
+        }
+      ],
+      "exit_code": 1,
+      "detail": "IBEX_ACCEPTANCE=[{\"name\": \"test_dedup\", \"passed\": true}, {\"name\": \"test_conflict\", \"passed\": true}, {\"name\": \"test_invalid_not_reserved\", \"passed\": false, \"error\": \"InvalidOperation\"}, {\"name\": \"test_independent_and_round_once\", \"passed\": true}]\n",
+      "artifact": "from decimal import Decimal, ROUND_HALF_UP, InvalidOperation\n\nclass EventLedger:\n    def __init__(self):\n        self.events = {}\n        self.balance = Decimal('0.00')\n\n    def apply(self, event_id: str, amount: str) -> bool:\n        if not event_id or not amount:\n            raise ValueError('Event ID and amount must be nonempty strings.')\n        try:\n            amount_decimal = Decimal(amount)\n        except (InvalidOperation, TypeError):\n            raise ValueError('Amount must be a valid number.')\n        \n        if amount_decimal < 0 or not amount_decimal.is_finite():\n            raise ValueError('Amount must be a nonnegative finite number.')\n        \n        if event_id in self.events:\n            if self.events[event_id] == amount_decimal:\n                return False  # Exact duplicate, do nothing.\n            else:\n                raise ValueError('Event ID reused with a different amount.')\n        \n        self.events[event_id] = amount_decimal\n        self.balance += amount_decimal\n        return True\n\n    def total(self) -> str:\n        return str(self.balance.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))",
+      "static_advisory": {
+        "no_float_money": true,
+        "has_type_hints": false
+      },
+      "input_tokens": 248738,
+      "output_tokens": 3525,
+      "tool_calls": 26,
+      "elapsed_seconds": 132.037,
+      "repeat": 2
+    },
+    {
+      "id": "fastapi-validation",
+      "category": "api",
+      "passed": false,
+      "acceptance": [],
+      "exit_code": 1,
+      "detail": "/usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n  from starlette.testclient import TestClient as TestClient  # noqa\nTraceback (most recent call last):\n  File \"<string>\", line 4, in <module>\n    exec(\"\\nfrom fastapi.testclient import TestClient\\nfrom app.quote_eval import app\\ndef test_quote():\\n    with TestClient(app) as c:\\n        r=c.post('/quote',json={'unitPrice':'1.005','quantity':2})\\n        assert r.status_code == 200 and r.json() == {'total':'2.01'}\\ndef test_health():\\n    with TestClient(app) as c:\\n        assert c.get('/health').json() == {'status':'ok'}\\ndef test_invalid():\\n    with TestClient(app) as c:\\n        for body in [{},{'unitPrice':'1'},{'unitPrice':'-1','quantity':1},{'unitPrice':'NaN','quantity':1},{'unitPrice':'1','quantity':0},{'unitPrice':'1','quantity':101},{'unitPrice':'1','quantity':True},{'unitPrice':'1','quantity':1.5}]:\\n            assert c.post('/quote',json=body).status_code == 422\\n\",scope)\n    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"<string>\", line 3, in <module>\n    scope={'pytest':pytest}\n  File \"/home/agent/app/quote_eval.py\", line 7, in <module>\n    class QuoteRequest(BaseModel):\n        unitPrice: confloat(ge=0, finite=True)\n        quantity: conint(gt=0, lt=101)\n  File \"/home/agent/app/quote_eval.py\", line 8, in QuoteRequest\n    unitPrice: confloat(ge=0, finite=True)\n               ~~~~~~~~^^^^^^^^^^^^^^^^^^^\nTypeError: confloat() got an unexpected keyword argument 'finite'\n",
+      "artifact": "from fastapi import FastAPI, HTTPException\nfrom pydantic import BaseModel, conint, confloat\nfrom decimal import Decimal, ROUND_HALF_UP\n\napp = FastAPI()\n\nclass QuoteRequest(BaseModel):\n    unitPrice: confloat(ge=0, finite=True)\n    quantity: conint(gt=0, lt=101)\n\n@app.post('/quote')\nasync def quote(request: QuoteRequest):\n    total = (Decimal(request.unitPrice) * request.quantity).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)\n    return {'total': str(total)}\n\n@app.get('/health')\nasync def health():\n    return {'status': 'ok'}",
+      "static_advisory": {
+        "no_float_money": true,
+        "has_type_hints": true
+      },
+      "input_tokens": 150483,
+      "output_tokens": 1706,
+      "tool_calls": 16,
+      "elapsed_seconds": 77.891,
+      "repeat": 2
+    },
+    {
+      "id": "retry-boundaries",
+      "category": "resilience",
+      "passed": false,
+      "error_type": "GraphRecursionError",
+      "elapsed_seconds": 210.131,
+      "repeat": 2
+    }
+  ],
+  "summary": {
+    "trials": 12,
+    "passed": 1,
+    "task_success_rate": 0.08333333333333333,
+    "median_seconds": 110.6845,
+    "by_case": {
+      "discount-rounding": {
+        "passed": 0,
+        "trials": 2
+      },
+      "fastapi-validation": {
+        "passed": 0,
+        "trials": 2
+      },
+      "idempotent-events": {
+        "passed": 0,
+        "trials": 2
+      },
+      "money-total": {
+        "passed": 0,
+        "trials": 2
+      },
+      "pagination-bugfix": {
+        "passed": 1,
+        "trials": 2
+      },
+      "retry-boundaries": {
+        "passed": 0,
+        "trials": 2
+      }
+    }
+  },
+  "finished_at": "2026-11-13T13:59:44.162253+00:00",
+  "complete": true
+}
