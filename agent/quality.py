@@ -14,6 +14,7 @@ from typing import Any, Callable
 from langchain.agents.middleware import AgentMiddleware, hook_config
 from langchain.messages import AIMessage, HumanMessage, ToolMessage
 from langchain.tools import tool
+from agent.contracts import MaintainedContract
 
 
 QUALITY_RULES = """
@@ -120,7 +121,8 @@ class CodingQuality(AgentMiddleware):
     Instances belong to one graph execution scope, never shared across tenants.
     """
 
-    def __init__(self, backend: Any, model_factory: Callable) -> None:
+    def __init__(self, backend: Any, model_factory: Callable,
+                 maintained_contract: MaintainedContract | None = None) -> None:
         self.backend = backend
         self.model_factory = model_factory
         self.tools = self._tools()
@@ -134,6 +136,7 @@ class CodingQuality(AgentMiddleware):
         self.final_retries = 0
         self.failed_calls: dict[str, int] = {}
         self.initialized = False
+        self.maintained_contract = maintained_contract
 
     async def abefore_agent(self, state: dict, runtime: Any) -> None:
         """Capture the actual user request, not later verification feedback."""
@@ -166,6 +169,22 @@ print(json.dumps({'files':files,'context':context}))
         """
         async with self.lock:
             if self.contract is not None:
+                return
+            if self.maintained_contract is not None:
+                maintained = self.maintained_contract
+                if self.original != maintained.request:
+                    raise QualityBlocked("Maintained contract does not match the original request")
+                # Invalid maintained contracts fail closed; never silently fall back
+                # to model-generated tests or project-only verification.
+                contract = parse_contract(json.dumps({"requires_changes": True,
+                    "requirements": maintained.requirements, "tests": maintained.tests}))
+                before = await self.snapshot(include_context=True)
+                self.initial = before["files"]
+                self.initialized = True
+                self.contract = {**contract, "scope": "maintained_contract_and_project"}
+                self.events.append({"type": "maintained_contract", "id": maintained.identifier,
+                    "sha256": maintained.sha256, "provenance": maintained.provenance,
+                    "requirements": maintained.requirements, "tests": maintained.tests})
                 return
             try:
                 await self._prepare_generated()

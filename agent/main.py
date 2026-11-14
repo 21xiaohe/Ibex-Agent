@@ -5,6 +5,7 @@ from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
 from deepagents.backends.sandbox import BaseSandbox
 from agent.quality import CodingQuality, QUALITY_RULES
+from agent.contracts import MaintainedContract
 from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.memory import MemorySaver
 from infra.settings import get_settings
@@ -37,11 +38,16 @@ def build_model() -> Any:
 
 
 def _build(backend: Any, workdir: str, checkpointer: Any, store: Any,
-           user_id: str, channel: str, team: bool, extra_tools: list) -> Any:
+           user_id: str, channel: str, team: bool, extra_tools: list,
+           maintained_contract: MaintainedContract | None = None) -> Any:
     prompt = IBEX_SYSTEM_PROMPT + SANDBOX_PATH_RULES.format(workdir=workdir)
-    quality = CodingQuality(backend, build_model) if isinstance(backend, BaseSandbox) else None
+    if maintained_contract is not None and (team or not isinstance(backend, BaseSandbox)):
+        raise ValueError("Maintained contracts currently require a single-agent executable sandbox")
+    quality = CodingQuality(backend, build_model, maintained_contract) if isinstance(backend, BaseSandbox) else None
     if quality:
         prompt += QUALITY_RULES
+        if maintained_contract is not None:
+            prompt += "\n本次使用预先固定的需求契约；verify_changes 会执行该契约及项目测试并返回具体失败。请尽早调用并据此修复。契约测试通过只代表这些断言通过，不保证需求完整覆盖。"
     if team:
         prompt += "\n复杂任务依次委派 planner/researcher/coder/tester/reviewer。代码完成后调用 reviewer，测试失败不得报告完成。"
     graph = create_deep_agent(
@@ -67,7 +73,8 @@ def build_agent(checkpointer: Any = None, store: Any = None, user_id: str = "ano
 
 async def build_agent_for_service(checkpointer: Any = None, store: Any = None,
                                   user_id: str = "anonymous", channel: str = "api",
-                                  team: bool | None = None) -> tuple[Any, Any]:
+                                  team: bool | None = None,
+                                  maintained_contract: MaintainedContract | None = None) -> tuple[Any, Any]:
     """Create one owned sandbox and load configured MCP tools into the shared graph."""
     settings = get_settings()
     team = settings.agent_team if team is None else team
@@ -81,7 +88,8 @@ async def build_agent_for_service(checkpointer: Any = None, store: Any = None,
             sandbox = backend = await create_backend()
             workdir = backend.workdir
         mcp_tools = await MCPManager.from_settings().get_tools()
-        agent = _build(backend, workdir, checkpointer, store, user_id, channel, team, mcp_tools)
+        agent = _build(backend, workdir, checkpointer, store, user_id, channel, team, mcp_tools,
+                       maintained_contract=maintained_contract)
         return agent, sandbox
     except BaseException:
         await release_backend(sandbox)
