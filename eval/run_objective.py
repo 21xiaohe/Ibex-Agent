@@ -59,6 +59,7 @@ async def run_trial(case: dict, factory: Callable, timeout: float = 300) -> dict
     from eval.exec_scorer import _static_checks
     started = time.monotonic()
     sandbox = None
+    agent = None
     record: dict = {"id": case["id"], "category": case["category"], "passed": False}
     try:
         async with asyncio.timeout(timeout):
@@ -88,6 +89,18 @@ async def run_trial(case: dict, factory: Callable, timeout: float = 300) -> dict
     except Exception as error:
         record.update(error_type=type(error).__name__)
     finally:
+        # Capture diagnostics BEFORE destroying the owned sandbox, even after timeout.
+        # This does not change the frozen acceptance command or success criterion.
+        if sandbox is not None and "artifact" not in record:
+            try:
+                files = await asyncio.wait_for(sandbox.adownload_files([sandbox.workdir + "/" + case["target_file"]]), timeout=10)
+                record["artifact"] = (files[0].content or b"").decode("utf-8", errors="replace") if files else ""
+            except Exception as error:
+                record["artifact_capture_error"] = type(error).__name__
+        quality = getattr(agent, "ibex_quality", None)
+        if quality is not None:
+            record["quality_trace"] = quality.events
+            record["internal_verification_passed"] = bool(quality.last_verification and quality.last_verification.get("passed"))
         try:
             await release_backend(sandbox)
         except Exception as error:
@@ -111,6 +124,8 @@ async def run(args: argparse.Namespace) -> int:
     report: dict = {"suite": SUITE_VERSION, "suite_sha256": suite_hash(), "config": config,
                    "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                    "started_at": datetime.now(timezone.utc).isoformat(), "samples": []}
+    report["environment"] = {"model_tiers": settings.model_tiers, "request_timeout": settings.timeout,
+                             "max_retries": settings.max_retries}
     baseline = json.loads(Path(args.baseline).read_text(encoding="utf-8")) if args.baseline else None
     if baseline and (baseline["suite_sha256"] != report["suite_sha256"] or baseline["config"] != config or baseline["runner_sha256"] != report["runner_sha256"]):
         raise ValueError("Baseline suite, runner or configuration does not match")

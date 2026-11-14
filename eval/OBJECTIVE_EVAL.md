@@ -37,3 +37,7 @@ python -m eval.run_objective --repeats 2 --output logs/objective-run-002.json --
 - `Objective model evaluation (manual)`：手动触发真实模型评测，默认 6 题 × 2 次，全部通过才成功；无论通过与否都上传原始 JSON。需要自行配置仓库 Secret `IBEX_API_KEY`，以及可选变量 `IBEX_MODEL_NAME`、`IBEX_BASE_URL`。普通 push 不调用付费模型。
 
 本机真实运行的结果与失败分析见项目根目录 `FOLLOWUP_REPORT.md`。发布的原始评测文件不含模型密钥。
+
+2026-11-14 的质量修复与面试说明见 `INTERVIEW_REPAIR_NOTES.md`。本轮评分器增加异常前的代码/工具轨迹采集，原 6 题定义与 `acceptance_command` 保持不变。因评分器文件哈希改变，旧基线不直接传入 `--baseline`；报告中单独核对任务和验收命令一致性并列比较，不能把不同哈希当作完全相同的运行器。
+
+补充的新任务使用 `python -m eval.run_holdout --repeats 2 --output logs/new-tasks.json`。该小集合覆盖区间合并、库存原子更新和时区转换，与原集合分开统计。它是新任务验证，不是双盲或统计独立的能力评测。

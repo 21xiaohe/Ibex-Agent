@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Any
 from deepagents import create_deep_agent
 from deepagents.backends import FilesystemBackend
+from deepagents.backends.sandbox import BaseSandbox
+from agent.quality import CodingQuality, QUALITY_RULES
 from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.memory import MemorySaver
 from infra.settings import get_settings
@@ -37,17 +39,23 @@ def build_model() -> Any:
 def _build(backend: Any, workdir: str, checkpointer: Any, store: Any,
            user_id: str, channel: str, team: bool, extra_tools: list) -> Any:
     prompt = IBEX_SYSTEM_PROMPT + SANDBOX_PATH_RULES.format(workdir=workdir)
+    quality = CodingQuality(backend, build_model) if isinstance(backend, BaseSandbox) else None
+    if quality:
+        prompt += QUALITY_RULES
     if team:
         prompt += "\n复杂任务依次委派 planner/researcher/coder/tester/reviewer。代码完成后调用 reviewer，测试失败不得报告完成。"
-    return create_deep_agent(
+    graph = create_deep_agent(
         model=build_model(), system_prompt=prompt, backend=backend,
         skills=[f"{workdir.rstrip('/')}/skills"], memory=[f"{workdir.rstrip('/')}/AGENTS.md"],
-        tools=get_tools("search") + extra_tools,
+        tools=get_tools("search") + extra_tools + (quality.tools if quality else []),
         subagents=build_subagents(workdir, backend) if team else [],
         middleware=[RequestContextMiddleware(user_id=user_id, channel=channel), ToolAuditMiddleware(),
-                    CostMeterMiddleware(), LLMConcurrencyMiddleware(), build_fallback_middleware()],
+                    CostMeterMiddleware(), LLMConcurrencyMiddleware(), build_fallback_middleware()] + ([quality] if quality else []),
         checkpointer=checkpointer, store=store,
     )
+    # Per-request diagnostic handle; never part of prompts or externally supplied state.
+    graph.ibex_quality = quality
+    return graph
 
 
 def build_agent(checkpointer: Any = None, store: Any = None, user_id: str = "anonymous",

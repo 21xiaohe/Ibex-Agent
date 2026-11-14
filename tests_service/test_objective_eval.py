@@ -61,3 +61,23 @@ def test_timeout_releases_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
     result=asyncio.run(run_trial(CASES[0],AsyncMock(return_value=(NS(ainvoke=hang),backend)),timeout=.01))
     assert not result['passed'] and result['error_type']=='TimeoutError'
     cleanup.assert_awaited_once_with(backend)
+
+
+def test_failed_trial_saves_artifact_and_trace_before_cleanup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A quality-gate failure retains partial code and tool evidence without becoming a pass."""
+    from sandbox import lifecycle
+    from agent.quality import QualityBlocked
+    order=[]
+    async def download(paths: list) -> list:
+        order.append('download')
+        return [NS(content=b'partial code',error=None)]
+    async def cleanup(backend: object) -> None:
+        order.append('cleanup')
+    monkeypatch.setattr(lifecycle,'release_backend',cleanup)
+    backend=NS(workdir='/home/agent',adownload_files=download)
+    agent=NS(ainvoke=AsyncMock(side_effect=QualityBlocked('failed')),
+             ibex_quality=NS(events=[{'type':'verification','passed':False}],last_verification={'passed':False}))
+    result=asyncio.run(run_trial(CASES[0],AsyncMock(return_value=(agent,backend))))
+    assert result['error_type']=='QualityBlocked' and not result['passed']
+    assert result['artifact']=='partial code' and result['quality_trace'][0]['passed'] is False
+    assert order==['download','cleanup']
