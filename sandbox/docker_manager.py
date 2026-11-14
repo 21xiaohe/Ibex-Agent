@@ -37,46 +37,37 @@ _active_ids: set[str] = set()
 
 # ---------- 内部工具：异步执行外部命令 ----------
 
-async def _run(cmd: list[str]) -> tuple[int, str]:
-    """异步执行一条外部命令，返回 (退出码, 合并后的输出文本)。
+async def _run(cmd: list[str], timeout: float = 60) -> tuple[int, str]:
+    """Bound a lifecycle command and reap its local child on timeout.
 
-    参数
-    ----
-    cmd : list[str]
-        要执行的命令及参数列表，例如 ["docker", "run", "-d", ...]。
-
-    返回
-    ----
-    tuple[int, str]
-        - int : 进程退出码。若 returncode 为 None（极端情况），回退为 -1。
-        - str : stdout + stderr 合并后的 UTF-8 文本，解码失败的字节用 U+FFFD 替换。
-
-    设计说明
-    --------
-    使用 asyncio.create_subprocess_exec 而非 subprocess.run，
-    以避免在事件循环中阻塞（容器操作可能持续数秒甚至更久）。
-    stderr 合并到 stdout，简化调用方的错误处理——
-    只需检查退出码 + 一段文本即可判断成败。
+    The Windows selector loop uses subprocess.run in a thread; cancellation of
+    the caller cannot stop that thread, but its command still has this deadline.
+    Killing a Docker CLI does not undo an operation already accepted by Docker;
+    owned orphan reconciliation remains necessary after uncertain outcomes.
     """
+    if timeout <= 0:
+        raise ValueError("Command timeout must be positive")
     if sys.platform == "win32":
-        # psycopg 要求 SelectorEventLoop；该循环不支持 asyncio 子进程。
         result = await asyncio.to_thread(
             subprocess.run, cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=timeout,
         )
         return result.returncode, result.stdout.decode("utf-8", errors="replace")
     proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,       # 捕获标准输出
-        stderr=asyncio.subprocess.STDOUT,     # stderr 重定向到 stdout，统一处理
+        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
     )
-    # communicate() 等待进程结束并一次性读完输出，避免管道缓冲区满导致死锁
-    # 返回的第二个值是 stderr，因为已合并到 stdout 所以为 None
-    out, _ = await proc.communicate()
-
-    return (
-        proc.returncode if proc.returncode is not None else -1,
-        out.decode("utf-8", errors="replace"),
-    )
+    communication = asyncio.create_task(proc.communicate())
+    try:
+        out, _ = await asyncio.wait_for(asyncio.shield(communication), timeout)
+    except (TimeoutError, asyncio.CancelledError):
+        if proc.returncode is None:
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
+        await asyncio.shield(communication)
+        raise
+    return proc.returncode if proc.returncode is not None else -1, out.decode("utf-8", errors="replace")
 
 
 # ---------- 核心 API 1：创建加固沙箱容器 ----------

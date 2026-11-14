@@ -7,6 +7,7 @@ import hmac
 from pathlib import PurePosixPath
 import time
 import re
+import subprocess
 from uuid import uuid4
 
 from fastapi import FastAPI, Depends, Header, HTTPException, Response, Request
@@ -77,6 +78,19 @@ app = FastAPI(title="Ibex private sandbox broker", lifespan=lifespan, dependenci
 async def health() -> dict:
     """Report readiness after owned orphan reconciliation has finished."""
     return {"status": "ok"}
+
+
+@app.get("/readyz")
+async def ready() -> dict:
+    """Check the actual Docker management connection without creating a workload."""
+    from sandbox.docker_manager import _run
+    try:
+        code, _ = await _run(["docker", "info", "--format", "{{.ServerVersion}}"], timeout=3)
+        if code:
+            raise RuntimeError("Docker unavailable")
+    except (OSError, RuntimeError, TimeoutError, subprocess.TimeoutExpired):
+        raise HTTPException(503, "Docker dependency unavailable") from None
+    return {"status": "ready"}
 
 
 def _entry(identifier: str) -> dict:

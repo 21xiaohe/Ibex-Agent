@@ -1,0 +1,57 @@
+{
+  "files_sha256": {
+    "agent/quality.py": "038e216d35b4e5bf07eca924a8efdd10ab12224a480635268386e6a593815ef4",
+    "agent/main.py": "4fdb66cbfb0c237b00eee0c9a07fb6294983ff25151fe4fa0d69e21b8e09651d",
+    "middleware/audit.py": "d5fe119d09a9c1e21d1ee343c758c50589f14e699d585caa3bf0daf4c24820a7",
+    "eval/run_objective.py": "2c3354422b9b5dfa4ed392296809f0c865d8adb4a60140208dfbe27cf3c3800f",
+    "eval/objective_cases.py": "6f890b093be90f98e3409e7ffdba25d40e4736b0bc2af35f1a71693342eb8ed9",
+    "eval/holdout_cases.py": "0ef4230cab4eaebe8c07c2f5f5a3e35aacbc34c72446184ab3f021a59907f158",
+    "skills/unit-test/SKILL.md": "e12e7e6e2d8de83faf12f12b438bc8ab78a88e7cbe4ec441e7be08facb74ed0e",
+    "skills/fastapi-endpoint/SKILL.md": "ef36ed1028d27672d2b32212729f5573bc1405476028a512c99a6f334ee00eac"
+  },
+  "base_commit": "3cba3e39b4748a9a14c673c50640b484de67252c",
+  "parallel_suites": {
+    "original_after_recovery": 1,
+    "new_tasks_before_recovery": 2
+  },
+  "trials_per_suite": "sequential",
+  "date": "2026-11-14 Asia/Shanghai",
+  "original_acceptance_unchanged": true,
+  "original_tasks_unchanged": true,
+  "environment": {
+    "python": "3.13.18",
+    "model_name": "qwen-max",
+    "model_tiers": {
+      "strong": "qwen-max",
+      "standard": "qwen-max",
+      "cheap": "qwen-max"
+    },
+    "max_retries": 1,
+    "request_timeout": 45,
+    "versions": {
+      "deepagents": "0.6.11",
+      "langgraph": "1.2.6",
+      "langchain": "1.3.10",
+      "fastapi": "0.138.0",
+      "pytest": "9.1.1"
+    }
+  },
+  "revision": "validated-contract-or-explicit-project-only",
+  "account_recovered": true,
+  "source_commit": "30f86762a1281080755821f90c8162ef39cf313f",
+  "final_original_run": "quality-resumed-objective.json",
+  "final_new_tasks_run": "quality-release-holdout.json",
+  "docker_proxy_incident": {
+    "affected_original_run": "quality-proxy-interrupted.json",
+    "recovery": "User authorized Docker Desktop restart. Retained inaccessible local socket runtime directory as backup and created a fresh runtime directory. Restored all previously running containers. Original task suite restarted from zero with identical source."
+  },
+  "recorded_at": "2026-11-14T05:54:54.909232+00:00",
+  "continuation_source_commit": "7ad7028bb2a8fd9e3fcbbefc4e34bcb2f4c5023b",
+  "continuation_file_sha256": "b029b1ca2ebd3ed8de846e55d7dc6d07a9869e930d0489856e73734c1d618ed0",
+  "account_interruption": {
+    "source": "quality-recovered-objective.json",
+    "retained_trials": 4,
+    "resumed_trials": 8,
+    "failed_account_trial_retained": true
+  }
+}

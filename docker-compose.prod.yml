@@ -14,7 +14,10 @@ services:
       IBEX_SANDBOX_PROVIDER: docker
       IBEX_SANDBOX_API_URL: http://sandbox:8003
       IBEX_SANDBOX_API_TOKEN: ${IBEX_SANDBOX_API_TOKEN:?Set IBEX_SANDBOX_API_TOKEN}
-    depends_on: [postgres, redis, sandbox]
+    depends_on:
+      postgres: {condition: service_started}
+      redis: {condition: service_started}
+      sandbox: {condition: service_healthy}
     restart: unless-stopped
     # 用 Dockerfile 默认 CMD（bash scripts/start_web.sh）
 
@@ -29,7 +32,10 @@ services:
       IBEX_SANDBOX_PROVIDER: docker
       IBEX_SANDBOX_API_URL: http://sandbox:8003
       IBEX_SANDBOX_API_TOKEN: ${IBEX_SANDBOX_API_TOKEN:?Set IBEX_SANDBOX_API_TOKEN}
-    depends_on: [postgres, redis, sandbox]
+    depends_on:
+      postgres: {condition: service_started}
+      redis: {condition: service_started}
+      sandbox: {condition: service_healthy}
     restart: unless-stopped
     # 教学用单 worker，不写 replicas（多副本指标抓取有坑，见 §2.5 提醒）
 
@@ -58,6 +64,12 @@ services:
       IBEX_API_KEY: broker-does-not-call-models
       IBEX_SANDBOX_OWNER: ${COMPOSE_PROJECT_NAME:-ibex}
     volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,httpx; r=httpx.get('http://127.0.0.1:8003/readyz',headers={'Authorization':'Bearer '+os.environ['IBEX_SANDBOX_API_TOKEN']},timeout=5);r.raise_for_status()"]
+      interval: 15s
+      timeout: 7s
+      retries: 3
+      start_period: 15s
     restart: unless-stopped
 
   postgres:

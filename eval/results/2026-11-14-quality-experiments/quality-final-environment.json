@@ -1,0 +1,37 @@
+{
+  "files_sha256": {
+    "agent/quality.py": "d3d6032ecdab8891215751b6c80042d489ef36009e609ba89fa290d36ea9de7d",
+    "agent/main.py": "4fdb66cbfb0c237b00eee0c9a07fb6294983ff25151fe4fa0d69e21b8e09651d",
+    "middleware/audit.py": "d5fe119d09a9c1e21d1ee343c758c50589f14e699d585caa3bf0daf4c24820a7",
+    "eval/run_objective.py": "5c71cf102bd0ce0b43f04afeb7d94321190c6c4c69d59aa3d1dfaa0175a1987e",
+    "eval/objective_cases.py": "6f890b093be90f98e3409e7ffdba25d40e4736b0bc2af35f1a71693342eb8ed9",
+    "eval/holdout_cases.py": "0ef4230cab4eaebe8c07c2f5f5a3e35aacbc34c72446184ab3f021a59907f158",
+    "skills/unit-test/SKILL.md": "e12e7e6e2d8de83faf12f12b438bc8ab78a88e7cbe4ec441e7be08facb74ed0e",
+    "skills/fastapi-endpoint/SKILL.md": "ef36ed1028d27672d2b32212729f5573bc1405476028a512c99a6f334ee00eac"
+  },
+  "base_commit": "3cba3e39b4748a9a14c673c50640b484de67252c",
+  "parallel_suites": 2,
+  "trials_per_suite": "sequential",
+  "date": "2026-11-14 Asia/Shanghai",
+  "original_acceptance_unchanged": true,
+  "original_tasks_unchanged": true,
+  "environment": {
+    "python": "3.13.18",
+    "model_name": "qwen-max",
+    "model_tiers": {
+      "strong": "qwen-max",
+      "standard": "qwen-max",
+      "cheap": "qwen-max"
+    },
+    "max_retries": 1,
+    "request_timeout": 45,
+    "versions": {
+      "deepagents": "0.6.11",
+      "langgraph": "1.2.6",
+      "langchain": "1.3.10",
+      "fastapi": "0.138.0",
+      "pytest": "9.1.1"
+    }
+  },
+  "revision": "json-compatibility-fixed"
+}

@@ -26,3 +26,7 @@ deploy/secrets/
 
 # Local cumulative export; reviewed source files are committed instead.
 LOCAL_FIXES.patch
+
+.pytest-quality*/
+.pytest-resume*/
+.pytest-migration*/

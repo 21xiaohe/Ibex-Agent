@@ -1,0 +1,211 @@
+{
+  "id": "money-total",
+  "category": "decimal",
+  "passed": false,
+  "acceptance": [
+    {
+      "name": "test_basic",
+      "passed": true
+    },
+    {
+      "name": "test_empty_and_round_once",
+      "passed": true
+    },
+    {
+      "name": "test_precision",
+      "passed": true
+    },
+    {
+      "name": "test_invalid",
+      "passed": false,
+      "error": "InvalidOperation"
+    },
+    {
+      "name": "test_no_mutation",
+      "passed": true
+    }
+  ],
+  "exit_code": 1,
+  "detail": "IBEX_ACCEPTANCE=[{\"name\": \"test_basic\", \"passed\": true}, {\"name\": \"test_empty_and_round_once\", \"passed\": true}, {\"name\": \"test_precision\", \"passed\": true}, {\"name\": \"test_invalid\", \"passed\": false, \"error\": \"InvalidOperation\"}, {\"name\": \"test_no_mutation\", \"passed\": true}]\n",
+  "artifact": "from decimal import Decimal, ROUND_HALF_UP\n\ndef calc_total(items: list[dict]) -> str:\n    total = Decimal('0')\n    for item in items:\n        price = item.get('price')\n        qty = item.get('qty')\n        \n        if not (isinstance(price, str) and isinstance(qty, int) and not isinstance(qty, bool)):\n            raise ValueError('Invalid price or quantity type.')\n        \n        price_decimal = Decimal(price)\n        if not price_decimal.is_finite() or price_decimal < 0:\n            raise ValueError('Price must be a nonnegative finite decimal string.')\n        \n        if qty < 0:\n            raise ValueError('Quantity must be a nonnegative integer.')\n        \n        total += price_decimal * qty\n    \n    return str(total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))",
+  "static_advisory": {
+    "no_float_money": true,
+    "has_type_hints": true
+  },
+  "input_tokens": 104427,
+  "output_tokens": 1940,
+  "tool_calls": 12,
+  "quality_trace": [
+    {
+      "type": "contract",
+      "requirements": [
+        "Create app/cart_total.py with a function calc_total(items: list[dict]) -> str. Each item has price (nonnegative finite decimal string) and qty (nonnegative int, bool rejected).",
+        "Return the sum rounded once to 2 decimals with ROUND_HALF_UP.",
+        "Empty list returns '0.00'.",
+        "Raise ValueError for invalid price/qty.",
+        "Do not mutate inputs.",
+        "Use Decimal for calculations."
+      ],
+      "tests": "import pytest\nfrom app.cart_total import calc_total\nfrom decimal import Decimal, getcontext, ROUND_HALF_UP\n\ngetcontext().prec = 28\n\n\ndef test_calc_total_with_multiple_items():\n    items = [\n        {\"price\": \"10.5\", \"qty\": 2},\n        {\"price\": \"5.25\", \"qty\": 3}\n    ]\n    assert calc_total(items) == '36.75'\n\n\ndef test_calc_total_with_empty_list():\n    items = []\n    assert calc_total(items) == '0.00'\n\n\ndef test_calc_total_with_invalid_price():\n    items = [{\"price\": \"-10.5\", \"qty\": 2}]\n    with pytest.raises(ValueError):\n        calc_total(items)\n\n\ndef test_calc_total_with_invalid_qty():\n    items = [{\"price\": \"10.5\", \"qty\": -2}]\n    with pytest.raises(ValueError):\n        calc_total(items)\n\n\ndef test_calc_total_with_bool_qty():\n    items = [{\"price\": \"10.5\", \"qty\": True}]\n    with pytest.raises(ValueError):\n        calc_total(items)\n\n\ndef test_calc_total_with_nonfinite_price():\n    items = [{\"price\": \"Infinity\", \"qty\": 2}]\n    with pytest.raises(ValueError):\n        calc_total(items)\n",
+      "usage": {
+        "input_tokens": 983,
+        "output_tokens": 441,
+        "total_tokens": 1424,
+        "input_token_details": {
+          "cache_read": 0
+        },
+        "output_token_details": {}
+      }
+    },
+    {
+      "type": "tool",
+      "name": "execute",
+      "args": {
+        "command": "pytest /home/agent/tests/test_cart_total.py"
+      },
+      "failed": true,
+      "output": "/usr/local/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to \"function\" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\". Set it to \"fixture-scope\" to keep the current behavior.\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n============================= test session starts ==============================\nplatform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0\nrootdir: /home/agent\nplugins: anyio-4.16.0, asyncio-1.5.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 0 items\n\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n============================== 1 warning in 0.00s ==============================\nERROR: file or directory not found: /home/agent/tests/test_cart_total.py\n\n\n[Command failed with exit code 4]"
+    },
+    {
+      "type": "tool",
+      "name": "write_file",
+      "args": {
+        "file_path": "/home/agent/tests/test_cart_total.py",
+        "content": "from app.cart_total import calc_total\nfrom decimal import Decimal\n\n\ndef test_calc_total_empty():\n    assert calc_total([]) == '0.00'\n\ndef test_calc_total_single_item():\n    items = [{'price': '10.50', 'qty': 2}]\n    assert calc_total(items) == '21.00'\n\ndef test_calc_total_multiple_items():\n    items = [\n        {'price': '10.50', 'qty': 2},\n        {'price': '2.75', 'qty': 3}\n    ]\n    assert calc_total(items) == '28.75'\n\ndef test_calc_total_invalid_price_type():\n    items = [{'price': 10.50, 'qty': 2}]\n    try:\n        calc_total(items)\n    except ValueError as e:\n        assert str(e) == 'Invalid price or quantity type.'\n\ndef test_calc_total_invalid_qty_type():\n    items = [{'price': '10.50', 'qty': True}]\n    try:\n        calc_total(items)\n    except ValueError as e:\n        assert str(e) == 'Invalid price or quantity type.'\n\ndef test_calc_total_negative_price():\n    items = [{'price': '-10.50', 'qty': 2}]\n    try:\n        calc_total(items)\n    except ValueError as e:\n        assert str(e) == 'Price must be a nonnegative finite decimal string.'\n\ndef test_calc_total_infinite_price():\n    items = [{'price': 'Infinity', 'qty': 2}]\n    try:\n        calc_total(items)\n    except ValueError as e:\n        assert str(e) == 'Price must be a nonnegative finite decimal string.'\n\ndef test_calc_total_negative_quantity():\n    items = [{'price': '10.50', 'qty': -2}]\n    try:\n        calc_total(items)\n    except ValueError as e:\n        assert str(e) == 'Quantity must be a nonnegative integer.'"
+      },
+      "failed": false,
+      "output": "Updated file /home/agent/tests/test_cart_total.py"
+    },
+    {
+      "type": "tool",
+      "name": "write_file",
+      "args": {
+        "file_path": "/home/agent/app/cart_total.py",
+        "content": "from decimal import Decimal, ROUND_HALF_UP\n\ndef calc_total(items: list[dict]) -> str:\n    total = Decimal('0')\n    for item in items:\n        price = item.get('price')\n        qty = item.get('qty')\n        \n        if not (isinstance(price, str) and isinstance(qty, int)):\n            raise ValueError('Invalid price or quantity type.')\n        \n        price_decimal = Decimal(price)\n        if not price_decimal.is_finite() or price_decimal < 0:\n            raise ValueError('Price must be a nonnegative finite decimal string.')\n        \n        if qty < 0:\n            raise ValueError('Quantity must be a nonnegative integer.')\n        \n        total += price_decimal * qty\n    \n    return str(total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))"
+      },
+      "failed": false,
+      "output": "Updated file /home/agent/app/cart_total.py"
+    },
+    {
+      "type": "tool",
+      "name": "ls",
+      "args": {
+        "path": "/home/agent/tests"
+      },
+      "failed": false,
+      "output": "['/home/agent/tests/test_cart_total.py', '/home/agent/tests/test_orders.py', '/home/agent/tests/conftest.py']"
+    },
+    {
+      "type": "tool",
+      "name": "execute",
+      "args": {
+        "command": "pytest /home/agent/tests/test_cart_total.py"
+      },
+      "failed": true,
+      "output": "/usr/local/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to \"function\" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\". Set it to \"fixture-scope\" to keep the current behavior.\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n============================= test session starts ==============================\nplatform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0\nrootdir: /home/agent\nplugins: anyio-4.16.0, asyncio-1.5.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 8 items\n\ntests/test_cart_total.py ..F.....                                        [100%]\n\n=================================== FAILURES ===================================\n________________________ test_calc_total_multiple_items ________________________\n\n    def test_calc_total_multiple_items():\n        items = [\n            {'price': '10.50', 'qty': 2},\n            {'price': '2.75', 'qty': 3}\n        ]\n>       assert calc_total(items) == '28.75'\nE       AssertionError: assert '29.25' == '28.75'\nE         \nE         - 28.75\nE         + 29.25\n\ntests/test_cart_total.py:17: AssertionError\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_cart_total.py::test_calc_total_multiple_items - AssertionEr...\n==================== 1 failed, 7 passed, 1 warning in 0.02s ====================\n\n[Command failed with exit code 1]"
+    },
+    {
+      "type": "tool",
+      "name": "edit_file",
+      "args": {
+        "file_path": "/home/agent/app/cart_total.py",
+        "old_string": "        total += price_decimal * qty\n    \n    return str(total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))",
+        "new_string": "        total += price_decimal * Decimal(qty)\n    \n    return str(total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))"
+      },
+      "failed": false,
+      "output": "Successfully replaced 1 instance(s) of the string in '/home/agent/app/cart_total.py'"
+    },
+    {
+      "type": "tool",
+      "name": "execute",
+      "args": {
+        "command": "pytest /home/agent/tests/test_cart_total.py"
+      },
+      "failed": true,
+      "output": "/usr/local/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to \"function\" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\". Set it to \"fixture-scope\" to keep the current behavior.\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n============================= test session starts ==============================\nplatform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0\nrootdir: /home/agent\nplugins: anyio-4.16.0, asyncio-1.5.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 8 items\n\ntests/test_cart_total.py ..F.....                                        [100%]\n\n=================================== FAILURES ===================================\n________________________ test_calc_total_multiple_items ________________________\n\n    def test_calc_total_multiple_items():\n        items = [\n            {'price': '10.50', 'qty': 2},\n            {'price': '2.75', 'qty': 3}\n        ]\n>       assert calc_total(items) == '28.75'\nE       AssertionError: assert '29.25' == '28.75'\nE         \nE         - 28.75\nE         + 29.25\n\ntests/test_cart_total.py:17: AssertionError\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_cart_total.py::test_calc_total_multiple_items - AssertionEr...\n==================== 1 failed, 7 passed, 1 warning in 0.02s ====================\n\n[Command failed with exit code 1]"
+    },
+    {
+      "type": "tool",
+      "name": "edit_file",
+      "args": {
+        "file_path": "/home/agent/app/cart_total.py",
+        "old_string": "        total += price_decimal * Decimal(qty)\n    \n    return str(total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))",
+        "new_string": "        total += price_decimal * qty\n    \n    return str(total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))"
+      },
+      "failed": false,
+      "output": "Successfully replaced 1 instance(s) of the string in '/home/agent/app/cart_total.py'"
+    },
+    {
+      "type": "tool",
+      "name": "edit_file",
+      "args": {
+        "file_path": "/home/agent/tests/test_cart_total.py",
+        "old_string": "    assert calc_total(items) == '28.75'",
+        "new_string": "    assert calc_total(items) == '29.25'"
+      },
+      "failed": false,
+      "output": "Successfully replaced 1 instance(s) of the string in '/home/agent/tests/test_cart_total.py'"
+    },
+    {
+      "type": "verification",
+      "passed": false,
+      "stage": "tests",
+      "exit_code": 1,
+      "tests": 15,
+      "skipped": 0,
+      "output": "....F..........                                                          [100%]\n=================================== FAILURES ===================================\n________________________ test_calc_total_with_bool_qty _________________________\n\n    def test_calc_total_with_bool_qty():\n        items = [{\"price\": \"10.5\", \"qty\": True}]\n>       with pytest.raises(ValueError):\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE ValueError\n\n/tmp/ibex-contract-hck8pij0/test_contract.py:35: Failed\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED ::test_calc_total_with_bool_qty - Failed: DID NOT RAISE ValueError\n1 failed, 14 passed, 1 warning in 0.09s\n",
+      "fingerprint": {
+        "app/cart_total.py": "4c9c66771baae0c6670eb80a9a96255ccb67d0fdfe89b88d8ab8fdf674ad481d",
+        "app/orders.py": "c9571b9006e9988d594b8d9e286dd17e0902042b3fde4a378eff6d77e2082a5b",
+        "app/pricing_example.py": "826be1c35868a68a02c90e9393b328022beb17949d9197e14d79b619c995d6c4",
+        "tests/conftest.py": "4846725b6451c6712a627175a78197d4602f66d3f17c34055d7e25ee7519a31c",
+        "tests/test_cart_total.py": "c727db5372da63307c5ea32309e011ad9766c99d35b8bf403cd45f98485789a9",
+        "tests/test_orders.py": "9c6e1eee7412d03592dc7f71555bb820eb121bf378e6457311b7c7e95d96258b"
+      }
+    },
+    {
+      "type": "tool",
+      "name": "verify_changes",
+      "args": {},
+      "failed": false,
+      "output": "{\"passed\": false, \"stage\": \"tests\", \"exit_code\": 1, \"tests\": 15, \"skipped\": 0, \"output\": \"....F..........                                                          [100%]\\n=================================== FAILURES ===================================\\n________________________ test_calc_total_with_bool_qty _________________________\\n\\n    def test_calc_total_with_bool_qty():\\n        items = [{\\\"price\\\": \\\"10.5\\\", \\\"qty\\\": True}]\\n>       with pytest.raises(ValueError):\\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\\nE       Failed: DID NOT RAISE ValueError\\n\\n/tmp/ibex-contract-hck8pij0/test_contract.py:35: Failed\\n=============================== warnings summary ===============================\\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\\n    from starlette.testclient import TestClient as TestClient  # noqa\\n\\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\\n=========================== short test summary info ============================\\nFAILED ::test_calc_total_with_bool_qty - Failed: DID NOT RAISE ValueError\\n1 failed, 14 passed, 1 warning in 0.09s\\n\", \"fingerprint\": {\"app/cart_total.py\": \"4c9c66771baae0c6670eb80a9a96255ccb67d0fdfe89b88d8ab8fdf674ad481d\", \"app/orders.py\": \"c9571b9006e9988d594b8d9e286dd17e0902042b3fde4a378eff6d77e2082a5b\", \"app/pricing_example.py\": \"826be1c35868a68a02c90e9393b328022beb17949d9197e14d79b619c995d6c4\", \"tests/conftest.py\": \"4846725b6451c6712a627175a78197d4602f66d3f17c34055d7e25ee7519a31c\", \"tests/test_cart_total.py\": \"c727db5372da63307c5ea32309e011ad9766c99d35b8bf403cd45f98485789a9\", \"tests/test_orders.py\": \"9c6e1eee7412d03592dc7f71555bb820eb121bf378e6457311b7c7e95d96258b\"}}"
+    },
+    {
+      "type": "tool",
+      "name": "edit_file",
+      "args": {
+        "file_path": "/home/agent/app/cart_total.py",
+        "old_string": "        if not (isinstance(price, str) and isinstance(qty, int)):\n            raise ValueError('Invalid price or quantity type.')\n        \n        price_decimal = Decimal(price)\n        if not price_decimal.is_finite() or price_decimal < 0:\n            raise ValueError('Price must be a nonnegative finite decimal string.')\n        \n        if qty < 0:\n            raise ValueError('Quantity must be a nonnegative integer.')\n        \n        total += price_decimal * qty",
+        "new_string": "        if not (isinstance(price, str) and isinstance(qty, int) and not isinstance(qty, bool)):\n            raise ValueError('Invalid price or quantity type.')\n        \n        price_decimal = Decimal(price)\n        if not price_decimal.is_finite() or price_decimal < 0:\n            raise ValueError('Price must be a nonnegative finite decimal string.')\n        \n        if qty < 0:\n            raise ValueError('Quantity must be a nonnegative integer.')\n        \n        total += price_decimal * qty"
+      },
+      "failed": false,
+      "output": "Successfully replaced 1 instance(s) of the string in '/home/agent/app/cart_total.py'"
+    },
+    {
+      "type": "verification",
+      "passed": true,
+      "stage": "tests",
+      "exit_code": 0,
+      "tests": 15,
+      "skipped": 0,
+      "output": "...............                                                          [100%]\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n15 passed, 1 warning in 0.04s\n",
+      "fingerprint": {
+        "app/cart_total.py": "a1964d6af90c588e0f38d8024bcf40439a8e1336a8f5a34434e7ec93e76631ea",
+        "app/orders.py": "c9571b9006e9988d594b8d9e286dd17e0902042b3fde4a378eff6d77e2082a5b",
+        "app/pricing_example.py": "826be1c35868a68a02c90e9393b328022beb17949d9197e14d79b619c995d6c4",
+        "tests/conftest.py": "4846725b6451c6712a627175a78197d4602f66d3f17c34055d7e25ee7519a31c",
+        "tests/test_cart_total.py": "c727db5372da63307c5ea32309e011ad9766c99d35b8bf403cd45f98485789a9",
+        "tests/test_orders.py": "9c6e1eee7412d03592dc7f71555bb820eb121bf378e6457311b7c7e95d96258b"
+      }
+    },
+    {
+      "type": "tool",
+      "name": "verify_changes",
+      "args": {},
+      "failed": false,
+      "output": "{\"passed\": true, \"stage\": \"tests\", \"exit_code\": 0, \"tests\": 15, \"skipped\": 0, \"output\": \"...............                                                          [100%]\\n=============================== warnings summary ===============================\\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\\n    from starlette.testclient import TestClient as TestClient  # noqa\\n\\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\\n15 passed, 1 warning in 0.04s\\n\", \"fingerprint\": {\"app/cart_total.py\": \"a1964d6af90c588e0f38d8024bcf40439a8e1336a8f5a34434e7ec93e76631ea\", \"app/orders.py\": \"c9571b9006e9988d594b8d9e286dd17e0902042b3fde4a378eff6d77e2082a5b\", \"app/pricing_example.py\": \"826be1c35868a68a02c90e9393b328022beb17949d9197e14d79b619c995d6c4\", \"tests/conftest.py\": \"4846725b6451c6712a627175a78197d4602f66d3f17c34055d7e25ee7519a31c\", \"tests/test_cart_total.py\": \"c727db5372da63307c5ea32309e011ad9766c99d35b8bf403cd45f98485789a9\", \"tests/test_orders.py\": \"9c6e1eee7412d03592dc7f71555bb820eb121bf378e6457311b7c7e95d96258b\"}}"
+    }
+  ],
+  "internal_verification_passed": true,
+  "elapsed_seconds": 80.422
+}
