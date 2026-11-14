@@ -41,3 +41,15 @@ python -m eval.run_objective --repeats 2 --output logs/objective-run-002.json --
 2026-11-14 的质量修复与面试说明见 `INTERVIEW_REPAIR_NOTES.md`。本轮评分器增加异常前的代码/工具轨迹采集，原 6 题定义与 `acceptance_command` 保持不变。因评分器文件哈希改变，旧基线不直接传入 `--baseline`；报告中单独核对任务和验收命令一致性并列比较，不能把不同哈希当作完全相同的运行器。
 
 补充的新任务使用 `python -m eval.run_holdout --repeats 2 --output logs/new-tasks.json`。该小集合覆盖区间合并、库存原子更新和时区转换，与原集合分开统计。它是新任务验证，不是双盲或统计独立的能力评测。
+
+## 账号恢复后续跑
+
+收到 `Arrearage` 或 `insufficient_quota` 时，评测器记录失败试次并停止剩余调用，退出码为 2。用户恢复账号后，可显式续跑尚未执行的试次：
+
+```bash
+python -m eval.resume_objective --source logs/account-interrupted.json --output logs/continued.json
+```
+
+续跑只接受账号错误中断的原题记录，校验任务集、评分器哈希、模型配置、请求限制和已完成试次顺序。新文件保留全部旧样本，**账号失败也继续计入分母，不重新执行它来换取通过**；保存来源文件哈希和续跑时间。原文件不覆盖。再次账号失败仍停止；只有累计执行完全部计划试次才标 `complete=true`。
+
+这些校验不能自动证明部署镜像和所有依赖一致，仍需随结果保存源码、环境及恢复前后的差异。本轮 Agent、任务定义和验收命令未因续跑改变。含基础设施失败的最终成功率是实际执行结果，不能作为排除了基础设施影响的纯模型能力结论。
