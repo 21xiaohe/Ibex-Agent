@@ -1,5 +1,6 @@
 # middleware/audit.py —— 工具审计埋点
 import time
+import re
 from collections.abc import Callable
 
 from langchain.agents.middleware import AgentMiddleware
@@ -23,7 +24,11 @@ class ToolAuditMiddleware(AgentMiddleware):
         start = time.perf_counter()
         status = "ok"
         try:
-            return await handler(request)
+            result = await handler(request)
+            if isinstance(result, ToolMessage) and (result.status == "error" or
+                    re.search(r"\[Command failed with exit code [1-9]\d*\]", str(result.content))):
+                status = "error"
+            return result
         except Exception:
             status = "error"
             raise

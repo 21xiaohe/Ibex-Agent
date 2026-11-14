@@ -7,6 +7,33 @@
 from langchain.agents.middleware import ModelFallbackMiddleware
 
 from infra.llm_router import get_model
+from obs.metrics import AGENT_FALLBACK
+from typing import Any
+
+
+class MeasuredFallback(ModelFallbackMiddleware):
+    """Count each attempted fallback without changing the library error handling."""
+    async def awrap_model_call(self, request: Any, handler: Any) -> Any:
+        """Record async fallback attempts, including failed alternatives."""
+        attempt = 0
+        async def measured(current: Any) -> Any:
+            nonlocal attempt
+            if attempt:
+                AGENT_FALLBACK.labels("strong" if attempt == 1 else "standard", "standard" if attempt == 1 else "cheap").inc()
+            attempt += 1
+            return await handler(current)
+        return await super().awrap_model_call(request, measured)
+
+    def wrap_model_call(self, request: Any, handler: Any) -> Any:
+        """Record synchronous fallback attempts with the same definition."""
+        attempt = 0
+        def measured(current: Any) -> Any:
+            nonlocal attempt
+            if attempt:
+                AGENT_FALLBACK.labels("strong" if attempt == 1 else "standard", "standard" if attempt == 1 else "cheap").inc()
+            attempt += 1
+            return handler(current)
+        return super().wrap_model_call(request, measured)
 
 
 def build_fallback_middleware() -> ModelFallbackMiddleware:
@@ -16,7 +43,7 @@ def build_fallback_middleware() -> ModelFallbackMiddleware:
     这条中间件在主模型抛错时依次尝试下面的备用模型(不含主模型本身)。
     ModelFallbackMiddleware 接收的是备用模型,可传字符串或 BaseChatModel 实例。
     """
-    return ModelFallbackMiddleware(
+    return MeasuredFallback(
         get_model("standard"),   # 第一备用
         get_model("cheap"),      # 第二备用
     )

@@ -12,12 +12,30 @@
 """
 from __future__ import annotations
 
+import asyncio
+import sys
+from functools import wraps
+
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from infra.settings import get_settings
 from infra.logging import get_logger
 
 logger = get_logger()
+
+
+def _run_proactor(function, args: tuple, kwargs: dict):
+    with asyncio.Runner(loop_factory=asyncio.ProactorEventLoop) as runner:
+        return runner.run(function(*args, **kwargs))
+
+
+def _bridge_tool(tool):
+    original = tool.coroutine
+    @wraps(original)
+    async def invoke(*args, **kwargs):
+        return await asyncio.to_thread(_run_proactor, original, args, kwargs)
+    tool.coroutine = invoke
+    return tool
 
 
 class MCPManager:
@@ -52,7 +70,13 @@ class MCPManager:
             try:
                 # 单 server 单独建 client 取工具：这样一个 server 出错不波及其它
                 client = MultiServerMCPClient({name: conf})
-                tools = await client.get_tools()
+                # psycopg requires Selector on Windows, but stdio MCP needs Proactor.
+                bridge = sys.platform == "win32" and conf.get("transport") == "stdio" and not isinstance(asyncio.get_running_loop(), asyncio.ProactorEventLoop)
+                if bridge:
+                    tools = await asyncio.wait_for(asyncio.to_thread(_run_proactor, client.get_tools, (), {}), timeout=30)
+                    tools = [_bridge_tool(tool) for tool in tools]
+                else:
+                    tools = await asyncio.wait_for(client.get_tools(), timeout=30)
                 all_tools.extend(tools)
                 logger.info("MCP server『{}』已接入，获取 {} 个工具", name, len(tools))
             except Exception as e:  # noqa: BLE001 容错：记录并跳过该 server

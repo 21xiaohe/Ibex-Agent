@@ -1,0 +1,24 @@
+{
+  "source_commit": "e72b6cef2652a5a93ac1489c8e59f616db7365fb",
+  "suite_sha256": "d71912de63ca5aeb503de47604b72b511acc3c32046c5c87aef5e4d3da168d1c",
+  "environment": {
+    "model": "qwen-max",
+    "tiers": {
+      "strong": "qwen-max",
+      "standard": "qwen-max",
+      "cheap": "qwen-max"
+    },
+    "timeout": 45,
+    "retries": 1,
+    "versions": {
+      "deepagents": "0.6.11",
+      "langgraph": "1.2.6",
+      "fastapi": "0.138.0",
+      "pydantic": "2.13.4",
+      "pytest": "9.1.1"
+    }
+  },
+  "windows": "155 passed, 1 skipped",
+  "linux": "156 passed",
+  "scope": "4 trials, fixed task and contract code before first model request"
+}

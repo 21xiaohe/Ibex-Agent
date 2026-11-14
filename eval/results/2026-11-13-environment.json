@@ -1,0 +1,22 @@
+{
+  "python": "3.13.18",
+  "model_name": "qwen-max",
+  "model_provider": "openai",
+  "model_tiers": {
+    "strong": "qwen-max",
+    "standard": "qwen-max",
+    "cheap": "qwen-max"
+  },
+  "max_retries": 1,
+  "request_timeout": 45,
+  "sandbox_provider": "docker",
+  "versions": {
+    "deepagents": "0.6.11",
+    "langgraph": "1.2.6",
+    "langchain": "1.3.10",
+    "fastapi": "0.138.0",
+    "pytest": "9.1.1"
+  },
+  "source_commit": "f44b2efd1e5454994a4b7ac90a91d04c1ee837a2",
+  "deployment_image": "sha256:b6d2d42e8add0ccb6c9704c76219b18e512cdad338247e9e84c8227ac1c6a012"
+}

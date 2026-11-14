@@ -6,3 +6,9 @@ __pycache__
 .idea
 loadtest/results*
 eval/baseline.json
+.env*
+logs/
+.pytest*
+*.patch
+
+deploy/secrets/

@@ -1,0 +1,282 @@
+{
+  "suite": "ibex-new-tasks-v1",
+  "suite_sha256": "a32b2eb16fc9feb725aaf770f25fdd1085dc7b9af94100c12bf03683a872a14f",
+  "config": {
+    "model": "qwen-max",
+    "provider": "openai",
+    "sandbox": "docker",
+    "team": false,
+    "temperature": 0,
+    "timeout_seconds": 300.0,
+    "repeats": 2
+  },
+  "runner_sha256": "5c71cf102bd0ce0b43f04afeb7d94321190c6c4c69d59aa3d1dfaa0175a1987e",
+  "started_at": "2026-11-14T05:20:02.622480+00:00",
+  "samples": [
+    {
+      "id": "merge-ranges",
+      "category": "algorithm",
+      "passed": false,
+      "error_type": "QualityBlocked",
+      "artifact": "",
+      "quality_trace": [
+        {
+          "type": "contract_review",
+          "coverage_notes": [
+            "Added tests for malformed numeric text, NaN, infinity, and fractional inputs.",
+            "Added tests for missing and empty tuple inputs.",
+            "Added a test for single-element tuples.",
+            "Added a test for adjacent intervals to ensure they are not merged.",
+            "Added a test for large input to check performance and correctness."
+          ],
+          "usage": {
+            "input_tokens": 683,
+            "output_tokens": 425,
+            "total_tokens": 1108,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        }
+      ],
+      "internal_verification_passed": false,
+      "elapsed_seconds": 60.256,
+      "repeat": 1
+    },
+    {
+      "id": "inventory-transaction",
+      "category": "state",
+      "passed": false,
+      "error_type": "QualityBlocked",
+      "artifact": "",
+      "quality_trace": [
+        {
+          "type": "tool",
+          "name": "ls",
+          "args": {
+            "path": "/home/agent/app"
+          },
+          "failed": false,
+          "output": "['/home/agent/app/pricing_example.py', '/home/agent/app/orders.py']"
+        },
+        {
+          "type": "contract_review",
+          "coverage_notes": [
+            "Tested initialization with negative values.",
+            "Tested initialization with non-integer values (floats).",
+            "Tested initialization with boolean values.",
+            "Tested initialization with malformed strings.",
+            "Tested reserve with malformed string quantities.",
+            "Tested reserve with NaN quantities.",
+            "Tested reserve with infinity quantities.",
+            "Tested reserve with multiple errors in the request."
+          ],
+          "usage": {
+            "input_tokens": 884,
+            "output_tokens": 582,
+            "total_tokens": 1466,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "reference_usage",
+          "usage": {
+            "input_tokens": 860,
+            "output_tokens": 230,
+            "total_tokens": 1090,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "contract_preflight",
+          "attempt": 1,
+          "passed": false,
+          "output": "..........F.....                                                         [100%]\n=================================== FAILURES ===================================\n___________________ test_inventory_initialization_with_bools ___________________\n\n    def test_inventory_initialization_with_bools():\n>       with pytest.raises(ValueError):\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE ValueError\n\ntest_contract.py:60: Failed\n=========================== short test summary info ============================\nFAILED test_contract.py::test_inventory_initialization_with_bools - Failed: D...\n1 failed, 15 passed in 0.02s\n",
+          "tests": "import pytest\nfrom app.inventory_eval import Inventory\n\ndef test_inventory_initialization():\n    inv = Inventory({'A': 10, 'B': 20})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_success():\n    inv = Inventory({'A': 10, 'B': 20})\n    inv.reserve({'A': 5, 'B': 10})\n    assert inv.snapshot() == {'A': 5, 'B': 10}\n\ndef test_inventory_reserve_insufficient_stock():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'A': 15, 'B': 25})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_unknown_sku():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'C': 5})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_empty_request():\n    inv = Inventory({'A': 10, 'B': 20})\n    inv.reserve({})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_non_positive_quantity():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'A': 0, 'B': -5})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_non_integer_quantity():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'A': 5.5, 'B': 10.0})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_bool_quantity():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'A': True, 'B': False})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\nimport pytest\nfrom app.inventory_eval import Inventory\n\ndef test_inventory_initialization_with_negative_values():\n    with pytest.raises(ValueError):\n        Inventory({'A': -1, 'B': 20})\n\ndef test_inventory_initialization_with_non_integers():\n    with pytest.raises(ValueError):\n        Inventory({'A': 10.5, 'B': 20})\n\ndef test_inventory_initialization_with_bools():\n    with pytest.raises(ValueError):\n        Inventory({'A': True, 'B': False})\n\ndef test_inventory_initialization_with_malformed_strings():\n    with pytest.raises(ValueError):\n        Inventory({'A': 'not a number', 'B': 20})\n\ndef test_inventory_reserve_malformed_string_quantity():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'A': 'not a number', 'B': 10})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_nan_quantity():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'A': float('nan'), 'B': 10})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_infinity_quantity():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'A': float('inf'), 'B': 10})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_multiple_errors():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'C': 5, 'D': 10, 'A': -5, 'B': 0})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n"
+        },
+        {
+          "type": "contract_correction",
+          "reason": "The test `test_inventory_initialization_with_bools` was failing because the `Inventory` class did not explicitly check for boolean values in the initialization. The reference implementation now includes a more robust check to ensure that only nonnegative integers are accepted during initialization.",
+          "usage": {
+            "input_tokens": 1598,
+            "output_tokens": 1338,
+            "total_tokens": 2936,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "contract_preflight",
+          "attempt": 2,
+          "passed": false,
+          "output": "..........F.....                                                         [100%]\n=================================== FAILURES ===================================\n___________________ test_inventory_initialization_with_bools ___________________\n\n    def test_inventory_initialization_with_bools():\n>       with pytest.raises(ValueError):\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE ValueError\n\ntest_contract.py:60: Failed\n=========================== short test summary info ============================\nFAILED test_contract.py::test_inventory_initialization_with_bools - Failed: D...\n1 failed, 15 passed in 0.02s\n",
+          "tests": "import pytest\nfrom app.inventory_eval import Inventory\n\ndef test_inventory_initialization():\n    inv = Inventory({'A': 10, 'B': 20})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_success():\n    inv = Inventory({'A': 10, 'B': 20})\n    inv.reserve({'A': 5, 'B': 10})\n    assert inv.snapshot() == {'A': 5, 'B': 10}\n\ndef test_inventory_reserve_insufficient_stock():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'A': 15, 'B': 25})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_unknown_sku():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'C': 5})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_empty_request():\n    inv = Inventory({'A': 10, 'B': 20})\n    inv.reserve({})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_non_positive_quantity():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'A': 0, 'B': -5})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_non_integer_quantity():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'A': 5.5, 'B': 10.0})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_bool_quantity():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'A': True, 'B': False})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\nimport pytest\nfrom app.inventory_eval import Inventory\n\ndef test_inventory_initialization_with_negative_values():\n    with pytest.raises(ValueError):\n        Inventory({'A': -1, 'B': 20})\n\ndef test_inventory_initialization_with_non_integers():\n    with pytest.raises(ValueError):\n        Inventory({'A': 10.5, 'B': 20})\n\ndef test_inventory_initialization_with_bools():\n    with pytest.raises(ValueError):\n        Inventory({'A': True, 'B': False})\n\ndef test_inventory_initialization_with_malformed_strings():\n    with pytest.raises(ValueError):\n        Inventory({'A': 'not a number', 'B': 20})\n\ndef test_inventory_reserve_malformed_string_quantity():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'A': 'not a number', 'B': 10})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_nan_quantity():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'A': float('nan'), 'B': 10})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_infinity_quantity():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'A': float('inf'), 'B': 10})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n\ndef test_inventory_reserve_multiple_errors():\n    inv = Inventory({'A': 10, 'B': 20})\n    with pytest.raises(ValueError):\n        inv.reserve({'C': 5, 'D': 10, 'A': -5, 'B': 0})\n    assert inv.snapshot() == {'A': 10, 'B': 20}\n"
+        }
+      ],
+      "internal_verification_passed": false,
+      "elapsed_seconds": 98.107,
+      "repeat": 1
+    },
+    {
+      "id": "utc-normalization",
+      "category": "datetime",
+      "passed": false,
+      "error_type": "QualityBlocked",
+      "artifact": "",
+      "quality_trace": [
+        {
+          "type": "tool",
+          "name": "read_file",
+          "args": {
+            "file_path": "/home/agent/skills/fastapi-endpoint/SKILL.md",
+            "limit": 1000
+          },
+          "failed": false,
+          "output": "     1\t---\n     2\tname: fastapi-endpoint\n     3\tdescription: Implement typed FastAPI endpoints with request validation and tests.\n     4\t---\n     5\t\n     6\t# fastapi-endpoint\n     7\t\n     8\tRead the current router and schemas. Define bounded Pydantic input models and typed responses. Reuse authentication and tenant identity; do not trust tenant IDs from request bodies. Keep I/O asynchronous. Release owned resources in finally blocks. Add TestClient coverage for valid requests, invalid inputs, authorization and dependency failures. Run tests and report real results.\n     9\t\n    10\tInspect installed dependency APIs before choosing unfamiliar parameters:\n    11\tinspect_python_api(module=\"pydantic\", symbol=\"Field\") or a sandbox Python\n    12\tsignature check. Do not assume v1 and v2 validators have identical signatures.\n    13\tImport the changed application before reporting success. Use strict integer\n    14\tvalidation when required, and Decimal/string validation for money; do not turn\n    15\tmoney into float to simplify a request model. Include missing fields, nonfinite\n    16\tvalues, booleans and bounds when required by the user contract."
+        },
+        {
+          "type": "tool",
+          "name": "read_file",
+          "args": {
+            "file_path": "/home/agent/skills/unit-test/SKILL.md",
+            "limit": 1000
+          },
+          "failed": false,
+          "output": "     1\t---\n     2\tname: unit-test\n     3\tdescription: Implement and run pytest regression tests for Python changes.\n     4\t---\n     5\t\n     6\t# unit-test\n     7\t\n     8\tRead the implementation and existing tests. Cover the reported bug, boundaries, and failure paths. Use Decimal for money. Keep tests deterministic; mock external APIs in unit tests. Run python -m pytest and inspect its exit code. Report the command, passed/failed counts, and any untested integration. Never remove assertions or mark failing tests skipped to claim success.\n     9\t\n    10\tBefore implementation, map each explicit requirement to a test. Distinguish zero,\n    11\tempty and missing values; strict integer inputs must reject bool. For decimal\n    12\tinputs validate finiteness BEFORE comparison/arithmetic; normalize parsing errors\n    13\tto the exception promised by the API. Test state after failure and after duplicate\n    14\tinput when relevant. Do not silently invent additional constraints.\n    15\t\n    16\tAfter changes use verify_changes when available. It runs a separately drafted\n    17\trequirements contract and the project tests, and checks changed module imports.\n    18\tThese internal checks can be wrong: report a contradictory contract instead of\n    19\tdeleting or weakening it. External evaluation remains independent."
+        },
+        {
+          "type": "contract_review",
+          "coverage_notes": [
+            "Added tests for malformed numeric text, NaN, infinity, boolean, and fractional inputs.",
+            "Included tests for missing and empty string inputs.",
+            "All additional tests check for the specific ValueError as required."
+          ],
+          "usage": {
+            "input_tokens": 633,
+            "output_tokens": 295,
+            "total_tokens": 928,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "reference_usage",
+          "usage": {
+            "input_tokens": 851,
+            "output_tokens": 259,
+            "total_tokens": 1110,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "contract_preflight",
+          "attempt": 1,
+          "passed": false,
+          "output": "......F......                                                            [100%]\n=================================== FAILURES ===================================\n_______________ test_normalize_timestamp_malformed_numeric_text ________________\n\n    def test_normalize_timestamp_malformed_numeric_text() -> None:\n>       with pytest.raises(ValueError):\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE ValueError\n\ntest_contract.py:36: Failed\n=========================== short test summary info ============================\nFAILED test_contract.py::test_normalize_timestamp_malformed_numeric_text - Fa...\n1 failed, 12 passed in 0.02s\n",
+          "tests": "import pytest\nfrom app.time_eval import normalize_timestamp\n\n\ndef test_normalize_timestamp_valid_utc() -> None:\n    assert normalize_timestamp('2023-10-10T15:30:45Z') == '2023-10-10T15:30:45Z'\n\n\ndef test_normalize_timestamp_valid_offset() -> None:\n    assert normalize_timestamp('2023-10-10T15:30:45+02:00') == '2023-10-10T13:30:45Z'\n\n\ndef test_normalize_timestamp_day_rollover() -> None:\n    assert normalize_timestamp('2023-10-10T23:30:45+02:00') == '2023-10-10T21:30:45Z'\n\n\ndef test_normalize_timestamp_invalid_naive() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp('2023-10-10T15:30:45')\n\n\ndef test_normalize_timestamp_invalid_string() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp('invalid-date')\n\n\ndef test_normalize_timestamp_non_string_input() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp(12345)\n\nimport pytest\nfrom app.time_eval import normalize_timestamp\n\n\ndef test_normalize_timestamp_malformed_numeric_text() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp('2023-10-10T15:30:45.1234Z')\n\n\ndef test_normalize_timestamp_nan() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp('NaN')\n\n\ndef test_normalize_timestamp_infinity() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp('Infinity')\n\n\ndef test_normalize_timestamp_boolean_vs_int() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp(True)\n\n\ndef test_normalize_timestamp_fractional_vs_int() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp(123.45)\n\n\ndef test_normalize_timestamp_missing_input() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp(None)\n\n\ndef test_normalize_timestamp_empty_string() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp('')\n"
+        },
+        {
+          "type": "contract_correction",
+          "reason": "The original implementation of `normalize_timestamp` in `app/time_eval.py` did not correctly handle timestamps with fractional seconds, which caused the test `test_normalize_timestamp_malformed_numeric_text` to fail. The regular expression and the logic have been updated to ensure that timestamps with fractional seconds are rejected, aligning with the requirement to drop fractional seconds without rounding.",
+          "usage": {
+            "input_tokens": 1145,
+            "output_tokens": 869,
+            "total_tokens": 2014,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "contract_preflight",
+          "attempt": 2,
+          "passed": false,
+          "output": "......F......                                                            [100%]\n=================================== FAILURES ===================================\n_______________ test_normalize_timestamp_malformed_numeric_text ________________\n\n    def test_normalize_timestamp_malformed_numeric_text() -> None:\n>       with pytest.raises(ValueError):\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE ValueError\n\ntest_contract.py:33: Failed\n=========================== short test summary info ============================\nFAILED test_contract.py::test_normalize_timestamp_malformed_numeric_text - Fa...\n1 failed, 12 passed in 0.01s\n",
+          "tests": "import pytest\nfrom app.time_eval import normalize_timestamp\n\n\ndef test_normalize_timestamp_valid_utc() -> None:\n    assert normalize_timestamp('2023-10-10T15:30:45Z') == '2023-10-10T15:30:45Z'\n\n\ndef test_normalize_timestamp_valid_offset() -> None:\n    assert normalize_timestamp('2023-10-10T15:30:45+02:00') == '2023-10-10T13:30:45Z'\n\n\ndef test_normalize_timestamp_day_rollover() -> None:\n    assert normalize_timestamp('2023-10-10T23:30:45+02:00') == '2023-10-10T21:30:45Z'\n\n\ndef test_normalize_timestamp_invalid_naive() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp('2023-10-10T15:30:45')\n\n\ndef test_normalize_timestamp_invalid_string() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp('invalid-date')\n\n\ndef test_normalize_timestamp_non_string_input() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp(12345)\n\n\ndef test_normalize_timestamp_malformed_numeric_text() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp('2023-10-10T15:30:45.1234Z')\n\n\ndef test_normalize_timestamp_nan() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp('NaN')\n\n\ndef test_normalize_timestamp_infinity() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp('Infinity')\n\n\ndef test_normalize_timestamp_boolean_vs_int() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp(True)\n\n\ndef test_normalize_timestamp_fractional_vs_int() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp(123.45)\n\n\ndef test_normalize_timestamp_missing_input() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp(None)\n\n\ndef test_normalize_timestamp_empty_string() -> None:\n    with pytest.raises(ValueError):\n        normalize_timestamp('')\n"
+        }
+      ],
+      "internal_verification_passed": false,
+      "elapsed_seconds": 94.886,
+      "repeat": 1
+    },
+    {
+      "id": "merge-ranges",
+      "category": "algorithm",
+      "passed": false,
+      "error_type": "BadRequestError",
+      "artifact": "",
+      "quality_trace": [],
+      "internal_verification_passed": false,
+      "elapsed_seconds": 2.229,
+      "repeat": 2
+    },
+    {
+      "id": "inventory-transaction",
+      "category": "state",
+      "passed": false,
+      "error_type": "BadRequestError",
+      "artifact": "",
+      "quality_trace": [],
+      "internal_verification_passed": false,
+      "elapsed_seconds": 2.224,
+      "repeat": 2
+    },
+    {
+      "id": "utc-normalization",
+      "category": "datetime",
+      "passed": false,
+      "error_type": "BadRequestError",
+      "artifact": "",
+      "quality_trace": [],
+      "internal_verification_passed": false,
+      "elapsed_seconds": 2.192,
+      "repeat": 2
+    }
+  ],
+  "environment": {
+    "model_tiers": {
+      "strong": "qwen-max",
+      "standard": "qwen-max",
+      "cheap": "qwen-max"
+    },
+    "request_timeout": 45,
+    "max_retries": 1
+  },
+  "summary": {
+    "trials": 6,
+    "passed": 0,
+    "task_success_rate": 0.0,
+    "median_seconds": 31.2425,
+    "by_case": {
+      "inventory-transaction": {
+        "passed": 0,
+        "trials": 2
+      },
+      "merge-ranges": {
+        "passed": 0,
+        "trials": 2
+      },
+      "utc-normalization": {
+        "passed": 0,
+        "trials": 2
+      }
+    }
+  },
+  "finished_at": "2026-11-14T05:24:22.516364+00:00",
+  "complete": true
+}

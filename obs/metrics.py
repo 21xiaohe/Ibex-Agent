@@ -156,7 +156,7 @@ def _normalize_path(request: Request) -> str:
     if route and getattr(route, "path", None):
         return route.path
     # 未匹配到路由时，回退使用原始请求路径
-    return request.url.path
+    return "__unmatched__"
 
 
 class PrometheusMiddleware(BaseHTTPMiddleware):
@@ -184,7 +184,6 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
             HTTP 响应对象
         """
         # 前置处理：提前获取归一化路径与请求方法，作为指标标签公共值
-        path = _normalize_path(request)
         method = request.method
 
         # 请求开始：在飞请求计数 +1
@@ -204,6 +203,8 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
             status = response.status_code
             return response
         finally:
+            # Routing has now populated scope['route']; before call_next it is absent.
+            path = _normalize_path(request)
             # 后置处理：无论请求成功 / 抛出异常，都会执行本块逻辑，保证指标不丢失
             # 计算请求总耗时（单位：秒）
             elapsed = time.perf_counter() - start
@@ -216,3 +217,5 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
 
             # 记录请求耗时到直方图，按「方法 + 路径」维度统计耗时分布
             REQUEST_DURATION.labels(method, path).observe(elapsed)
+
+DELIVERY_RECORDS = Gauge("ibex_delivery_records", "Durable delivery records by state", ["status"])

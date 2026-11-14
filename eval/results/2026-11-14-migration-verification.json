@@ -1,0 +1,38 @@
+{
+  "/": 200,
+  "/healthz": 200,
+  "/readyz": 200,
+  "unauthenticated_issues": 401,
+  "prometheus": {
+    "ibex-sandbox": "up",
+    "ibex-web": "up",
+    "ibex-worker": "up"
+  },
+  "grafana": "ok",
+  "sandbox": {
+    "create_write_execute_read_cleanup": true,
+    "broker_ready": true,
+    "broker_auth": true
+  },
+  "no_owned_orphans": true,
+  "bind_mounts_migrated_to_e_drive": true,
+  "windows": {
+    "passed": 148,
+    "skipped": 1,
+    "warnings": 1,
+    "seconds": 43.35
+  },
+  "linux": {
+    "passed": 149,
+    "warnings": 2,
+    "seconds": 17.06
+  },
+  "paid_model_calls": 0,
+  "external_messages_sent": 0,
+  "source_sha256": {
+    "sandbox/docker_manager.py": "4afcdaacfed93834e3c2d8094d49f9542e0ef313f8cb26e5e0046022a9300c21",
+    "sandbox/service.py": "d0576cb5a0396c2e49d65b988b81d2ef44999da3c47c63239560d06674f9f9df",
+    "docker-compose.prod.yml": "89ad7be444093c32a0848e16ebf9710f0853b3b63f54ffccda0dad54acbf36e1",
+    "tests_service/test_process.py": "48586c7bcd6c483a2c2279866ebd243aff68e06c9b8dfcb7564c4de132874bd1"
+  }
+}

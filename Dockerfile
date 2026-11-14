@@ -1,6 +1,8 @@
 # Dockerfile —— Ibex 应用镜像（web / worker / 飞书接收端共用，启动命令不同）
 # 国内服务器用 pip + 清华源，避开 uv 在国内源上的卡死问题
+FROM docker:28-cli AS dockercli
 FROM python:3.13-slim
+COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
 
 WORKDIR /app
 

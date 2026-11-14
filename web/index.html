@@ -249,6 +249,7 @@
   </div>
   <div class="server-input-wrapper">
     <input type="text" id="serverInput" placeholder="请输入后端 API 地址..." autocomplete="off">
+    <input type="password" id="apiKeyInput" placeholder="API Key（仅保存在当前页面）" autocomplete="off">
   </div>
   <div class="server-presets" id="presets">
     <button class="preset-btn" data-url="http://localhost:8000">本地(8000)</button>
@@ -295,7 +296,7 @@
 const serverInput = document.getElementById("serverInput");
 const presetsContainer = document.getElementById("presets");
 
-let BACKEND = localStorage.getItem("ibex_backend_url") || "http://localhost:8000";
+let BACKEND = localStorage.getItem("ibex_backend_url") || (location.protocol.startsWith("http") ? location.origin : "http://localhost:8000");
 serverInput.value = BACKEND;
 
 function updatePresetActiveState(currentUrl) {
@@ -453,10 +454,10 @@ async function send(){
     bindCopy(bubble);
     setStatus(false, "就绪");
   } catch (err) {
-    bubble.innerHTML = `<span style="color:#b4534b; font-weight:500;">连接失败：${err.message}</span>
+    bubble.innerHTML = `<span style="color:#b4534b; font-weight:500;">连接失败：${escapeHtml(err.message)}</span>
       <div style="font-size:12.5px;color:var(--ink-soft);margin-top:8px; line-height: 1.5;">
         请检查：<br>
-        ① 当前配置的服务器地址 <b>${BACKEND}</b> 是否正确；<br>
+        ① 当前配置的服务器地址 <b>${escapeHtml(BACKEND)}</b> 是否正确；<br>
         ② 后端是否已开启 <b>CORS 跨域请求</b>；<br>
         ③ 后端服务是否正在正常运行。
       </div>`;
@@ -472,11 +473,12 @@ async function tryStream(text, bubble){
   try {
     resp = await fetch(`${BACKEND}/chat/stream`, {
       method:"POST",
-      headers:{ "Content-Type":"application/json" },
+      headers:{ "Content-Type":"application/json", "X-API-Key": document.getElementById("apiKeyInput").value.trim() },
       body: JSON.stringify({ text, source:"web", conversation_id: CONV_ID }),
     });
   } catch { return false; }
-  if (!resp.ok || !resp.body) return false;
+  if (resp.status === 404) return false;
+  if (!resp.ok || !resp.body) throw new Error("HTTP " + resp.status);
   const ctype = resp.headers.get("content-type") || "";
   if (!ctype.includes("text/event-stream") && !ctype.includes("stream")) return false;
 
@@ -498,7 +500,10 @@ async function tryStream(text, bubble){
         const data = s.slice(5).trim();
         if (data === "[DONE]") continue;
         let piece = data;
-        try { const j = JSON.parse(data); piece = j.text ?? j.content ?? j.delta ?? data; } catch {}
+        let j;
+        try { j = JSON.parse(data); } catch {}
+        if (j?.error) throw new Error(j.error);
+        if (j) piece = j.text ?? j.content ?? j.delta ?? "";
         acc += piece;
         bubble.innerHTML = renderStreaming(acc) + `<span class="cursor"></span>`;
         scrollDown();
@@ -514,7 +519,7 @@ async function tryStream(text, bubble){
 async function fallbackRequest(text, bubble){
   const resp = await fetch(`${BACKEND}/webhook/generic`, {
     method:"POST",
-    headers:{ "Content-Type":"application/json" },
+    headers:{ "Content-Type":"application/json", "X-API-Key": document.getElementById("apiKeyInput").value.trim() },
     body: JSON.stringify({ text, source:"web", conversation_id: CONV_ID }),
   });
   if (!resp.ok) throw new Error("HTTP " + resp.status);

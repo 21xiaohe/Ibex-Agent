@@ -28,7 +28,7 @@ async def run_issue(
     from sandbox.manager import download_artifacts
 
     thread_id = str(uuid7())   # 每个 Issue 一个 thread，对应一个独立沙箱
-    agent, sandbox, client = build_team_agent(thread_id, user_id=user_id, channel=channel)
+    agent, sandbox, client = await build_team_agent(thread_id, user_id=user_id, channel=channel)
 
     try:
         result = await agent.ainvoke(
@@ -39,15 +39,14 @@ async def run_issue(
 
         # 在关闭沙箱前取回产物（验证 agent 真的改了文件 / 取回成果）
         if fetch_paths:
-            # 需要 backend 来 download；从 agent 拿不到，这里直接用 sandbox 重建一个轻量 backend
-            from langchain_daytona import DaytonaSandbox
-            artifacts = download_artifacts(DaytonaSandbox(sandbox=sandbox), fetch_paths)
-            result["artifacts"] = artifacts  # {沙箱路径: bytes}
+            files = await sandbox.adownload_files(fetch_paths)
+            result["artifacts"] = {item.path: item.content for item in files if item.content is not None}
         return result
     finally:
         # 关键：无论成功失败都回收沙箱，避免资源泄漏/持续计费（官方强调）
         try:
-            sandbox.stop()
+            from sandbox.lifecycle import release_backend
+            await release_backend(sandbox)
             logger.info("沙箱已回收：thread_id={}", thread_id)
         except Exception as e:  # noqa: BLE001
             logger.warning("沙箱回收失败（thread_id={}）：{}", thread_id, e)

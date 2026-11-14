@@ -14,3 +14,19 @@ logs/
 .env
 .pytest_cache/
 .idea/
+
+.pytest-local-run*/
+
+.pytest-fixes*/
+.pytest-ci/
+
+deploy/secrets/
+
+.pytest-completion*/
+
+# Local cumulative export; reviewed source files are committed instead.
+LOCAL_FIXES.patch
+
+.pytest-quality*/
+.pytest-resume*/
+.pytest-migration*/

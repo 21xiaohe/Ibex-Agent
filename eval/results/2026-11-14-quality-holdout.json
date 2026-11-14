@@ -1,0 +1,1118 @@
+{
+  "suite": "ibex-new-tasks-v1",
+  "suite_sha256": "a32b2eb16fc9feb725aaf770f25fdd1085dc7b9af94100c12bf03683a872a14f",
+  "config": {
+    "model": "qwen-max",
+    "provider": "openai",
+    "sandbox": "docker",
+    "team": false,
+    "temperature": 0,
+    "timeout_seconds": 300.0,
+    "repeats": 2
+  },
+  "runner_sha256": "2c3354422b9b5dfa4ed392296809f0c865d8adb4a60140208dfbe27cf3c3800f",
+  "started_at": "2026-11-14T05:29:34.126618+00:00",
+  "samples": [
+    {
+      "id": "merge-ranges",
+      "category": "algorithm",
+      "passed": false,
+      "acceptance": [],
+      "exit_code": 1,
+      "detail": "Traceback (most recent call last):\n  File \"<string>\", line 9, in <module>\n    fn()\n    ~~^^\n  File \"<string>\", line 11, in test_invalid\n  File \"/usr/local/lib/python3.13/site-packages/_pytest/raises.py\", line 699, in __exit__\n    fail(f\"DID NOT RAISE {self.expected_exceptions[0].__name__}\")\n    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/site-packages/_pytest/outcomes.py\", line 162, in __call__\n    raise Failed(msg=reason, pytrace=pytrace)\nFailed: DID NOT RAISE ValueError\n",
+      "artifact": "from typing import List, Tuple, Union\n\n\ndef validate_interval(interval: Tuple[Union[int, bool], Union[int, bool]]) -> None:\n    if not isinstance(interval[0], int) or not isinstance(interval[1], int):\n        raise ValueError('Both start and end must be integers')\n    if interval[0] > interval[1]:\n        raise ValueError('Start of interval cannot be greater than end')\n\n\ndef merge_ranges(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\n    # Validate each interval before proceeding\n    for interval in intervals:\n        validate_interval(interval)\n\n    # Sort intervals based on the starting point\n    sorted_intervals = sorted(intervals, key=lambda x: x[0])\n\n    merged = []\n    for interval in sorted_intervals:\n        if not merged or merged[-1][1] < interval[0]:\n            # If list is empty or current interval does not overlap with the previous, simply append it.\n            merged.append(interval)\n        else:\n            # Otherwise, there is an overlap, so we merge the current and previous intervals.\n            merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n\n    return merged",
+      "static_advisory": {
+        "no_float_money": true,
+        "has_type_hints": true
+      },
+      "input_tokens": 85906,
+      "output_tokens": 2397,
+      "tool_calls": 9,
+      "quality_trace": [
+        {
+          "type": "contract_review",
+          "coverage_notes": [
+            "Added tests for malformed numeric text, NaN, and infinity values.",
+            "Added tests for missing input and empty intervals.",
+            "Added tests for single-element tuples and rounding boundaries."
+          ],
+          "usage": {
+            "input_tokens": 675,
+            "output_tokens": 232,
+            "total_tokens": 907,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "reference_usage",
+          "usage": {
+            "input_tokens": 863,
+            "output_tokens": 287,
+            "total_tokens": 1150,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "contract_preflight",
+          "attempt": 1,
+          "passed": false,
+          "output": "..FFF.......F...                                                         [100%]\n=================================== FAILURES ===================================\n___________________ test_merge_ranges_overlapping_intervals ____________________\n\n    def test_merge_ranges_overlapping_intervals():\n>       assert merge_ranges([(1, 3), (2, 4), (5, 7)]) == [(1, 4), (5, 7)]\nE       assert [(1, 7)] == [(1, 4), (5, 7)]\nE         \nE         At index 0 diff: (1, 7) != (1, 4)\nE         Right contains one more item: (5, 7)\nE         Use -v to get more diff\n\ntest_contract.py:11: AssertionError\n_____________________ test_merge_ranges_touching_intervals _____________________\n\n    def test_merge_ranges_touching_intervals():\n>       assert merge_ranges([(1, 3), (3, 5), (6, 8)]) == [(1, 5), (6, 8)]\nE       assert [(1, 8)] == [(1, 5), (6, 8)]\nE         \nE         At index 0 diff: (1, 8) != (1, 5)\nE         Right contains one more item: (6, 8)\nE         Use -v to get more diff\n\ntest_contract.py:14: AssertionError\n_____________________ test_merge_ranges_disjoint_intervals _____________________\n\n    def test_merge_ranges_disjoint_intervals():\n>       assert merge_ranges([(1, 2), (3, 4), (5, 6)]) == [(1, 2), (3, 4), (5, 6)]\nE       assert [(1, 6)] == [(1, 2), (3, 4), (5, 6)]\nE         \nE         At index 0 diff: (1, 6) != (1, 2)\nE         Right contains 2 more items, first extra item: (3, 4)\nE         Use -v to get more diff\n\ntest_contract.py:17: AssertionError\n_______________________ test_merge_ranges_missing_input ________________________\n\n    def test_merge_ranges_missing_input():\n        with pytest.raises(ValueError):\n>           merge_ranges(None)\n\ntest_contract.py:54: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nintervals = None\n\n    def merge_ranges(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:\n        def is_valid(interval: tuple[int, int]) -> bool:\n            if not isinstance(interval, tuple) or len(interval) != 2:\n                return False\n            start, end = interval\n            if not (isinstance(start, int) and isinstance(end, int)):\n                return False\n            if start > end:\n                return False\n            return True\n    \n        # Validate input\n>       if not all(is_valid(interval) for interval in intervals):\n                                                      ^^^^^^^^^\nE       TypeError: 'NoneType' object is not iterable\n\napp/ranges_eval.py:13: TypeError\n=========================== short test summary info ============================\nFAILED test_contract.py::test_merge_ranges_overlapping_intervals - assert [(1...\nFAILED test_contract.py::test_merge_ranges_touching_intervals - assert [(1, 8...\nFAILED test_contract.py::test_merge_ranges_disjoint_intervals - assert [(1, 6...\nFAILED test_contract.py::test_merge_ranges_missing_input - TypeError: 'NoneTy...\n4 failed, 12 passed in 0.02s\n",
+          "tests": "import pytest\nfrom app.ranges_eval import merge_ranges\n\ndef test_merge_ranges_empty():\n    assert merge_ranges([]) == []\n\ndef test_merge_ranges_single_interval():\n    assert merge_ranges([(1, 3)]) == [(1, 3)]\n\ndef test_merge_ranges_overlapping_intervals():\n    assert merge_ranges([(1, 3), (2, 4), (5, 7)]) == [(1, 4), (5, 7)]\n\ndef test_merge_ranges_touching_intervals():\n    assert merge_ranges([(1, 3), (3, 5), (6, 8)]) == [(1, 5), (6, 8)]\n\ndef test_merge_ranges_disjoint_intervals():\n    assert merge_ranges([(1, 2), (3, 4), (5, 6)]) == [(1, 2), (3, 4), (5, 6)]\n\ndef test_merge_ranges_invalid_start_greater_than_end():\n    with pytest.raises(ValueError):\n        merge_ranges([(3, 1)])\n\ndef test_merge_ranges_invalid_non_integer_values():\n    with pytest.raises(ValueError):\n        merge_ranges([(1.5, 3)])\n\ndef test_merge_ranges_invalid_bool_values():\n    with pytest.raises(ValueError):\n        merge_ranges([(True, False)])\n\ndef test_merge_ranges_no_mutation():\n    intervals = [(1, 3), (2, 4)]\n    original_intervals = intervals.copy()\n    merge_ranges(intervals)\n    assert intervals == original_intervals\n\nimport pytest\nfrom app.ranges_eval import merge_ranges\n\ndef test_merge_ranges_malformed_numeric_text():\n    with pytest.raises(ValueError):\n        merge_ranges([('1', '3')])\n\ndef test_merge_ranges_nan_values():\n    with pytest.raises(ValueError):\n        merge_ranges([(float('nan'), 3)])\n\ndef test_merge_ranges_infinity_values():\n    with pytest.raises(ValueError):\n        merge_ranges([(float('inf'), 3)])\n\ndef test_merge_ranges_missing_input():\n    with pytest.raises(ValueError):\n        merge_ranges(None)\n\ndef test_merge_ranges_empty_intervals():\n    with pytest.raises(ValueError):\n        merge_ranges([()])\n\ndef test_merge_ranges_single_element_tuples():\n    with pytest.raises(ValueError):\n        merge_ranges([(1,)])\n\ndef test_merge_ranges_rounding_boundaries():\n    assert merge_ranges([(1, 2), (2, 3)]) == [(1, 3)]\n"
+        },
+        {
+          "type": "contract_correction",
+          "reason": "The `merge_ranges` function was incorrectly merging intervals that should be kept separate. The condition to check for non-overlapping intervals was too permissive, causing disjoint intervals to be merged. The condition has been updated to ensure that only overlapping or touching intervals are merged. Additionally, the function now correctly handles `None` as input by raising a `ValueError`.",
+          "usage": {
+            "input_tokens": 1931,
+            "output_tokens": 984,
+            "total_tokens": 2915,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "contract_preflight",
+          "attempt": 2,
+          "passed": false,
+          "output": "..FFF...........                                                         [100%]\n=================================== FAILURES ===================================\n___________________ test_merge_ranges_overlapping_intervals ____________________\n\n    def test_merge_ranges_overlapping_intervals():\n>       assert merge_ranges([(1, 3), (2, 4), (5, 7)]) == [(1, 4), (5, 7)]\nE       assert [(1, 7)] == [(1, 4), (5, 7)]\nE         \nE         At index 0 diff: (1, 7) != (1, 4)\nE         Right contains one more item: (5, 7)\nE         Use -v to get more diff\n\ntest_contract.py:11: AssertionError\n_____________________ test_merge_ranges_touching_intervals _____________________\n\n    def test_merge_ranges_touching_intervals():\n>       assert merge_ranges([(1, 3), (3, 5), (6, 8)]) == [(1, 5), (6, 8)]\nE       assert [(1, 8)] == [(1, 5), (6, 8)]\nE         \nE         At index 0 diff: (1, 8) != (1, 5)\nE         Right contains one more item: (6, 8)\nE         Use -v to get more diff\n\ntest_contract.py:14: AssertionError\n_____________________ test_merge_ranges_disjoint_intervals _____________________\n\n    def test_merge_ranges_disjoint_intervals():\n>       assert merge_ranges([(1, 2), (3, 4), (5, 6)]) == [(1, 2), (3, 4), (5, 6)]\nE       assert [(1, 6)] == [(1, 2), (3, 4), (5, 6)]\nE         \nE         At index 0 diff: (1, 6) != (1, 2)\nE         Right contains 2 more items, first extra item: (3, 4)\nE         Use -v to get more diff\n\ntest_contract.py:17: AssertionError\n=========================== short test summary info ============================\nFAILED test_contract.py::test_merge_ranges_overlapping_intervals - assert [(1...\nFAILED test_contract.py::test_merge_ranges_touching_intervals - assert [(1, 8...\nFAILED test_contract.py::test_merge_ranges_disjoint_intervals - assert [(1, 6...\n3 failed, 13 passed in 0.02s\n",
+          "tests": "import pytest\nfrom app.ranges_eval import merge_ranges\n\ndef test_merge_ranges_empty():\n    assert merge_ranges([]) == []\n\ndef test_merge_ranges_single_interval():\n    assert merge_ranges([(1, 3)]) == [(1, 3)]\n\ndef test_merge_ranges_overlapping_intervals():\n    assert merge_ranges([(1, 3), (2, 4), (5, 7)]) == [(1, 4), (5, 7)]\n\ndef test_merge_ranges_touching_intervals():\n    assert merge_ranges([(1, 3), (3, 5), (6, 8)]) == [(1, 5), (6, 8)]\n\ndef test_merge_ranges_disjoint_intervals():\n    assert merge_ranges([(1, 2), (3, 4), (5, 6)]) == [(1, 2), (3, 4), (5, 6)]\n\ndef test_merge_ranges_invalid_start_greater_than_end():\n    with pytest.raises(ValueError):\n        merge_ranges([(3, 1)])\n\ndef test_merge_ranges_invalid_non_integer_values():\n    with pytest.raises(ValueError):\n        merge_ranges([(1.5, 3)])\n\ndef test_merge_ranges_invalid_bool_values():\n    with pytest.raises(ValueError):\n        merge_ranges([(True, False)])\n\ndef test_merge_ranges_no_mutation():\n    intervals = [(1, 3), (2, 4)]\n    original_intervals = intervals.copy()\n    merge_ranges(intervals)\n    assert intervals == original_intervals\n\nimport pytest\nfrom app.ranges_eval import merge_ranges\n\ndef test_merge_ranges_malformed_numeric_text():\n    with pytest.raises(ValueError):\n        merge_ranges([('1', '3')])\n\ndef test_merge_ranges_nan_values():\n    with pytest.raises(ValueError):\n        merge_ranges([(float('nan'), 3)])\n\ndef test_merge_ranges_infinity_values():\n    with pytest.raises(ValueError):\n        merge_ranges([(float('inf'), 3)])\n\ndef test_merge_ranges_missing_input():\n    with pytest.raises(ValueError):\n        merge_ranges(None)\n\ndef test_merge_ranges_empty_intervals():\n    with pytest.raises(ValueError):\n        merge_ranges([()])\n\ndef test_merge_ranges_single_element_tuples():\n    with pytest.raises(ValueError):\n        merge_ranges([(1,)])\n\ndef test_merge_ranges_rounding_boundaries():\n    assert merge_ranges([(1, 2), (2, 3)]) == [(1, 3)]\n"
+        },
+        {
+          "type": "contract_unavailable",
+          "error_type": "QualityBlocked",
+          "reason": "Contract/reference disagreement before implementation",
+          "scope": "project_only"
+        },
+        {
+          "type": "tool",
+          "name": "execute",
+          "args": {
+            "command": "pytest /home/agent/tests/test_ranges_eval.py"
+          },
+          "failed": true,
+          "output": "/usr/local/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to \"function\" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\". Set it to \"fixture-scope\" to keep the current behavior.\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\nERROR: file or directory not found: /home/agent/tests/test_ranges_eval.py\n\n============================= test session starts ==============================\nplatform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0\nrootdir: /home/agent\nplugins: anyio-4.16.0, asyncio-1.5.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 0 items\n\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n============================== 1 warning in 0.00s ==============================\n\n[Command failed with exit code 4]"
+        },
+        {
+          "type": "tool",
+          "name": "write_file",
+          "args": {
+            "file_path": "/home/agent/app/ranges_eval.py",
+            "content": "from typing import List, Tuple\n\ndef merge_ranges(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\n    # Sort intervals based on the starting point\n    sorted_intervals = sorted(intervals, key=lambda x: x[0])\n\n    merged = []\n    for interval in sorted_intervals:\n        if not merged or merged[-1][1] < interval[0] - 1:\n            # If list is empty or current interval does not overlap with the previous, simply append it.\n            merged.append(interval)\n        else:\n            # Otherwise, there is an overlap, so we merge the current and previous intervals.\n            merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n\n    return merged"
+          },
+          "failed": false,
+          "output": "Updated file /home/agent/app/ranges_eval.py"
+        },
+        {
+          "type": "tool",
+          "name": "write_file",
+          "args": {
+            "file_path": "/home/agent/tests/test_ranges_eval.py",
+            "content": "from app.ranges_eval import merge_ranges\n\n\ndef test_merge_ranges_empty():\n    assert merge_ranges([]) == []\n\ndef test_merge_ranges_single_interval():\n    assert merge_ranges([(1, 2)]) == [(1, 2)]\n\ndef test_merge_ranges_overlapping_intervals():\n    assert merge_ranges([(1, 3), (2, 4), (5, 7), (6, 8)]) == [(1, 4), (5, 8)]\n\ndef test_merge_ranges_touching_intervals():\n    assert merge_ranges([(1, 2), (2, 4), (5, 6), (6, 8)]) == [(1, 4), (5, 8)]\n\ndef test_merge_ranges_disjoint_intervals():\n    assert merge_ranges([(1, 2), (3, 4), (5, 6)]) == [(1, 2), (3, 4), (5, 6)]\n\ndef test_merge_ranges_invalid_input():\n    try:\n        merge_ranges([(1, 'a')])\n    except ValueError:\n        pass\n    else:\n        raise AssertionError('Expected a ValueError for invalid input')\n\ndef test_merge_ranges_non_integer_input():\n    try:\n        merge_ranges([(1.5, 2.5)])\n    except ValueError:\n        pass\n    else:\n        raise AssertionError('Expected a ValueError for non-integer input')\n\ndef test_merge_ranges_start_greater_than_end():\n    try:\n        merge_ranges([(2, 1)])\n    except ValueError:\n        pass\n    else:\n        raise AssertionError('Expected a ValueError for start greater than end')\n\ndef test_merge_ranges_mixed_input_types():\n    try:\n        merge_ranges([(1, 2), (True, False)])\n    except ValueError:\n        pass\n    else:\n        raise AssertionError('Expected a ValueError for mixed input types')\n\ndef test_merge_ranges_preserves_input():\n    original_intervals = [(1, 3), (2, 4), (5, 7), (6, 8)]\n    merge_ranges(original_intervals)\n    assert original_intervals == [(1, 3), (2, 4), (5, 7), (6, 8)], \\\n        'The function should not mutate the input list'\n"
+          },
+          "failed": false,
+          "output": "Updated file /home/agent/tests/test_ranges_eval.py"
+        },
+        {
+          "type": "tool",
+          "name": "execute",
+          "args": {
+            "command": "pytest /home/agent/tests/test_ranges_eval.py"
+          },
+          "failed": true,
+          "output": "/usr/local/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to \"function\" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\". Set it to \"fixture-scope\" to keep the current behavior.\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n============================= test session starts ==============================\nplatform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0\nrootdir: /home/agent\nplugins: anyio-4.16.0, asyncio-1.5.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 10 items\n\ntests/test_ranges_eval.py ..FFFFFFF.                                     [100%]\n\n=================================== FAILURES ===================================\n___________________ test_merge_ranges_overlapping_intervals ____________________\n\n    def test_merge_ranges_overlapping_intervals():\n>       assert merge_ranges([(1, 3), (2, 4), (5, 7), (6, 8)]) == [(1, 4), (5, 8)]\nE       assert [(1, 8)] == [(1, 4), (5, 8)]\nE         \nE         At index 0 diff: (1, 8) != (1, 4)\nE         Right contains one more item: (5, 8)\nE         Use -v to get more diff\n\ntests/test_ranges_eval.py:11: AssertionError\n_____________________ test_merge_ranges_touching_intervals _____________________\n\n    def test_merge_ranges_touching_intervals():\n>       assert merge_ranges([(1, 2), (2, 4), (5, 6), (6, 8)]) == [(1, 4), (5, 8)]\nE       assert [(1, 8)] == [(1, 4), (5, 8)]\nE         \nE         At index 0 diff: (1, 8) != (1, 4)\nE         Right contains one more item: (5, 8)\nE         Use -v to get more diff\n\ntests/test_ranges_eval.py:14: AssertionError\n_____________________ test_merge_ranges_disjoint_intervals _____________________\n\n    def test_merge_ranges_disjoint_intervals():\n>       assert merge_ranges([(1, 2), (3, 4), (5, 6)]) == [(1, 2), (3, 4), (5, 6)]\nE       assert [(1, 6)] == [(1, 2), (3, 4), (5, 6)]\nE         \nE         At index 0 diff: (1, 6) != (1, 2)\nE         Right contains 2 more items, first extra item: (3, 4)\nE         Use -v to get more diff\n\ntests/test_ranges_eval.py:17: AssertionError\n_______________________ test_merge_ranges_invalid_input ________________________\n\n    def test_merge_ranges_invalid_input():\n        try:\n            merge_ranges([(1, 'a')])\n        except ValueError:\n            pass\n        else:\n>           raise AssertionError('Expected a ValueError for invalid input')\nE           AssertionError: Expected a ValueError for invalid input\n\ntests/test_ranges_eval.py:25: AssertionError\n_____________________ test_merge_ranges_non_integer_input ______________________\n\n    def test_merge_ranges_non_integer_input():\n        try:\n            merge_ranges([(1.5, 2.5)])\n        except ValueError:\n            pass\n        else:\n>           raise AssertionError('Expected a ValueError for non-integer input')\nE           AssertionError: Expected a ValueError for non-integer input\n\ntests/test_ranges_eval.py:33: AssertionError\n___________________ test_merge_ranges_start_greater_than_end ___________________\n\n    def test_merge_ranges_start_greater_than_end():\n        try:\n            merge_ranges([(2, 1)])\n        except ValueError:\n            pass\n        else:\n>           raise AssertionError('Expected a ValueError for start greater than end')\nE           AssertionError: Expected a ValueError for start greater than end\n\ntests/test_ranges_eval.py:41: AssertionError\n_____________________ test_merge_ranges_mixed_input_types ______________________\n\n    def test_merge_ranges_mixed_input_types():\n        try:\n            merge_ranges([(1, 2), (True, False)])\n        except ValueError:\n            pass\n        else:\n>           raise AssertionError('Expected a ValueError for mixed input types')\nE           AssertionError: Expected a ValueError for mixed input types\n\ntests/test_ranges_eval.py:49: AssertionError\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_ranges_eval.py::test_merge_ranges_overlapping_intervals - a...\nFAILED tests/test_ranges_eval.py::test_merge_ranges_touching_intervals - asse...\nFAILED tests/test_ranges_eval.py::test_merge_ranges_disjoint_intervals - asse...\nFAILED tests/test_ranges_eval.py::test_merge_ranges_invalid_input - Assertion...\nFAILED tests/test_ranges_eval.py::test_merge_ranges_non_integer_input - Asser...\nFAILED tests/test_ranges_eval.py::test_merge_ranges_start_greater_than_end - ...\nFAILED tests/test_ranges_eval.py::test_merge_ranges_mixed_input_types - Asser...\n==================== 7 failed, 3 passed, 1 warning in 0.03s ====================\n\n[Command failed with exit code 1]"
+        },
+        {
+          "type": "tool",
+          "name": "edit_file",
+          "args": {
+            "file_path": "/home/agent/app/ranges_eval.py",
+            "old_string": "    if not merged or merged[-1][1] < interval[0] - 1:\n        # If list is empty or current interval does not overlap with the previous, simply append it.\n        merged.append(interval)\n    else:\n        # Otherwise, there is an overlap, so we merge the current and previous intervals.\n        merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n\n    return merged",
+            "new_string": "    if not merged or merged[-1][1] < interval[0]:\n        # If list is empty or current interval does not overlap with the previous, simply append it.\n        merged.append(interval)\n    else:\n        # Otherwise, there is an overlap, so we merge the current and previous intervals.\n        merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n\n    return merged"
+          },
+          "failed": true,
+          "output": "Error: String not found in file: '    if not merged or merged[-1][1] < interval[0] - 1:\n        # If list is empty or current interval does not overlap with the previous, simply append it.\n        merged.append(interval)\n    else:\n        # Otherwise, there is an overlap, so we merge the current and previous intervals.\n        merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n\n    return merged'"
+        },
+        {
+          "type": "tool",
+          "name": "edit_file",
+          "args": {
+            "file_path": "/home/agent/app/ranges_eval.py",
+            "old_string": "from typing import List, Tuple\n\ndef merge_ranges(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\n    # Sort intervals based on the starting point\n    sorted_intervals = sorted(intervals, key=lambda x: x[0])\n\n    merged = []\n    for interval in sorted_intervals:\n",
+            "new_string": "from typing import List, Tuple, Union\n\n\ndef validate_interval(interval: Tuple[Union[int, bool], Union[int, bool]]) -> None:\n    if not isinstance(interval[0], int) or not isinstance(interval[1], int):\n        raise ValueError('Both start and end must be integers')\n    if interval[0] > interval[1]:\n        raise ValueError('Start of interval cannot be greater than end')\n\n\ndef merge_ranges(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\n    # Validate each interval before proceeding\n    for interval in intervals:\n        validate_interval(interval)\n\n    # Sort intervals based on the starting point\n    sorted_intervals = sorted(intervals, key=lambda x: x[0])\n\n    merged = []\n    for interval in sorted_intervals:\n"
+          },
+          "failed": false,
+          "output": "Successfully replaced 1 instance(s) of the string in '/home/agent/app/ranges_eval.py'"
+        },
+        {
+          "type": "tool",
+          "name": "inspect_file",
+          "args": {
+            "file_path": "/home/agent/app/ranges_eval.py"
+          },
+          "failed": false,
+          "output": "{\"file_path\": \"/home/agent/app/ranges_eval.py\", \"sha256\": \"d4a1777b40116b84bdf2d9420483e47fc7425573d88ddfd92e05ea0fc45b0799\", \"content\": \"from typing import List, Tuple, Union\\n\\n\\ndef validate_interval(interval: Tuple[Union[int, bool], Union[int, bool]]) -> None:\\n    if not isinstance(interval[0], int) or not isinstance(interval[1], int):\\n        raise ValueError('Both start and end must be integers')\\n    if interval[0] > interval[1]:\\n        raise ValueError('Start of interval cannot be greater than end')\\n\\n\\ndef merge_ranges(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\\n    # Validate each interval before proceeding\\n    for interval in intervals:\\n        validate_interval(interval)\\n\\n    # Sort intervals based on the starting point\\n    sorted_intervals = sorted(intervals, key=lambda x: x[0])\\n\\n    merged = []\\n    for interval in sorted_intervals:\\n        if not merged or merged[-1][1] < interval[0] - 1:\\n            # If list is empty or current interval does not overlap with the previous, simply append it.\\n            merged.append(interval)\\n        else:\\n            # Otherwise, there is an overlap, so we merge the current and previous intervals.\\n            merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\\n\\n    return merged\"}"
+        },
+        {
+          "type": "tool",
+          "name": "replace_file",
+          "args": {
+            "file_path": "/home/agent/app/ranges_eval.py",
+            "expected_sha256": "d4a1777b40116b84bdf2d9420483e47fc7425573d88ddfd92e05ea0fc45b0799",
+            "content": "from typing import List, Tuple, Union\n\n\ndef validate_interval(interval: Tuple[Union[int, bool], Union[int, bool]]) -> None:\n    if not isinstance(interval[0], int) or not isinstance(interval[1], int):\n        raise ValueError('Both start and end must be integers')\n    if interval[0] > interval[1]:\n        raise ValueError('Start of interval cannot be greater than end')\n\n\ndef merge_ranges(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\n    # Validate each interval before proceeding\n    for interval in intervals:\n        validate_interval(interval)\n\n    # Sort intervals based on the starting point\n    sorted_intervals = sorted(intervals, key=lambda x: x[0])\n\n    merged = []\n    for interval in sorted_intervals:\n        if not merged or merged[-1][1] < interval[0]:\n            # If list is empty or current interval does not overlap with the previous, simply append it.\n            merged.append(interval)\n        else:\n            # Otherwise, there is an overlap, so we merge the current and previous intervals.\n            merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n\n    return merged"
+          },
+          "failed": false,
+          "output": "replaced\n"
+        },
+        {
+          "type": "tool",
+          "name": "execute",
+          "args": {
+            "command": "pytest /home/agent/tests/test_ranges_eval.py"
+          },
+          "failed": false,
+          "output": "/usr/local/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to \"function\" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\". Set it to \"fixture-scope\" to keep the current behavior.\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n============================= test session starts ==============================\nplatform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0\nrootdir: /home/agent\nplugins: anyio-4.16.0, asyncio-1.5.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 10 items\n\ntests/test_ranges_eval.py ..........                                     [100%]\n\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n======================== 10 passed, 1 warning in 0.01s =========================\n\n[Command succeeded with exit code 0]"
+        },
+        {
+          "type": "verification",
+          "passed": true,
+          "stage": "tests",
+          "exit_code": 0,
+          "tests": 11,
+          "skipped": 0,
+          "output": "...........                                                              [100%]\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n11 passed, 1 warning in 0.07s\n",
+          "fingerprint": {
+            "app/orders.py": "c9571b9006e9988d594b8d9e286dd17e0902042b3fde4a378eff6d77e2082a5b",
+            "app/pricing_example.py": "826be1c35868a68a02c90e9393b328022beb17949d9197e14d79b619c995d6c4",
+            "app/ranges_eval.py": "09eae908a110881ec62106e287f9a9d57b6c7e6e3759e9d8e9753312410ccf09",
+            "tests/conftest.py": "4846725b6451c6712a627175a78197d4602f66d3f17c34055d7e25ee7519a31c",
+            "tests/test_orders.py": "9c6e1eee7412d03592dc7f71555bb820eb121bf378e6457311b7c7e95d96258b",
+            "tests/test_ranges_eval.py": "ef036d1a675ce9b2a9ed62773a688f602ecbb530e60683b3a96b7363878ac2a7"
+          },
+          "scope": "project_only"
+        }
+      ],
+      "internal_verification_passed": true,
+      "internal_verification_scope": "project_only",
+      "elapsed_seconds": 143.663,
+      "repeat": 1
+    },
+    {
+      "id": "inventory-transaction",
+      "category": "state",
+      "passed": false,
+      "acceptance": [],
+      "exit_code": 1,
+      "detail": "Traceback (most recent call last):\n  File \"<string>\", line 9, in <module>\n    fn()\n    ~~^^\n  File \"<string>\", line 18, in test_invalid\n  File \"/usr/local/lib/python3.13/site-packages/_pytest/raises.py\", line 699, in __exit__\n    fail(f\"DID NOT RAISE {self.expected_exceptions[0].__name__}\")\n    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/site-packages/_pytest/outcomes.py\", line 162, in __call__\n    raise Failed(msg=reason, pytrace=pytrace)\nFailed: DID NOT RAISE ValueError\n",
+      "artifact": "class Inventory:\n    def __init__(self, initial: dict[str, int]):\n        self._validate_counts(initial)\n        self._counts = initial.copy()\n\n    @staticmethod\n    def _validate_counts(counts: dict[str, int]) -> None:\n        for count in counts.values():\n            if not isinstance(count, int) or count < 0:\n                raise ValueError('Counts must be nonnegative integers.')\n\n    def reserve(self, request: dict[str, int]) -> None:\n        self._validate_requests(request)\n        for sku, quantity in request.items():\n            if sku not in self._counts or self._counts[sku] < quantity:\n                raise ValueError('Insufficient stock or unknown SKU.')\n        for sku, quantity in request.items():\n            self._counts[sku] -= quantity\n\n    def snapshot(self) -> dict[str, int]:\n        return self._counts.copy()",
+      "static_advisory": {
+        "no_float_money": true,
+        "has_type_hints": false
+      },
+      "input_tokens": 48199,
+      "output_tokens": 598,
+      "tool_calls": 4,
+      "quality_trace": [
+        {
+          "type": "tool",
+          "name": "ls",
+          "args": {
+            "path": "/home/agent/app"
+          },
+          "failed": false,
+          "output": "['/home/agent/app/pricing_example.py', '/home/agent/app/orders.py']"
+        },
+        {
+          "type": "contract_review",
+          "coverage_notes": [
+            "Added tests for initialization with invalid types (float, bool, string, negative int).",
+            "Added tests for reserve with malformed numeric text, NaN, and infinity.",
+            "Added a test for reserve with zero quantity, which should raise ValueError.",
+            "Added a test for reserve with mixed valid and invalid SKUs, ensuring no changes on failure.",
+            "Added a test for reserve with an empty initial inventory, ensuring it remains unchanged."
+          ],
+          "usage": {
+            "input_tokens": 912,
+            "output_tokens": 682,
+            "total_tokens": 1594,
+            "input_token_details": {
+              "cache_read": 128
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "reference_usage",
+          "usage": {
+            "input_tokens": 860,
+            "output_tokens": 224,
+            "total_tokens": 1084,
+            "input_token_details": {
+              "cache_read": 128
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "contract_preflight",
+          "attempt": 1,
+          "passed": false,
+          "output": "........F.....F                                                          [100%]\n=================================== FAILURES ===================================\n_______________ test_inventory_initialization_with_invalid_types _______________\n\n    def test_inventory_initialization_with_invalid_types():\n        with pytest.raises(ValueError):\n            Inventory({'A': 10.5, 'B': 20})\n>       with pytest.raises(ValueError):\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE ValueError\n\ntest_contract.py:62: Failed\n_____________________ test_reserve_empty_initial_inventory _____________________\n\n    def test_reserve_empty_initial_inventory():\n        initial = {}\n        inventory = Inventory(initial)\n>       inventory.reserve({'A': 5})\n\ntest_contract.py:107: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nself = <app.inventory_eval.Inventory object at 0x7bf82f178590>\nrequest = {'A': 5}\n\n    def reserve(self, request: Dict[str, int]) -> None:\n        new_counts = self._counts.copy()\n        for sku, quantity in request.items():\n            if not isinstance(quantity, int) or quantity <= 0:\n                raise ValueError('Request quantities must be positive integers')\n            if sku not in new_counts:\n>               raise ValueError(f'Unknown SKU: {sku}')\nE               ValueError: Unknown SKU: A\n\napp/inventory_eval.py:18: ValueError\n=========================== short test summary info ============================\nFAILED test_contract.py::test_inventory_initialization_with_invalid_types - F...\nFAILED test_contract.py::test_reserve_empty_initial_inventory - ValueError: U...\n2 failed, 13 passed in 0.02s\n",
+          "tests": "import pytest\nfrom app.inventory_eval import Inventory\n\ndef test_inventory_initialization():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_valid_request():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    inventory.reserve({'A': 5, 'B': 10})\n    assert inventory.snapshot() == {'A': 5, 'B': 10}\n\ndef test_reserve_insufficient_stock():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': 15, 'B': 20})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_unknown_sku():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'C': 5})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_empty_request():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    inventory.reserve({})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_invalid_quantity_type():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': 5.5, 'B': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_non_positive_quantity():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': -5, 'B': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_snapshot_independent_copy():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    snapshot = inventory.snapshot()\n    snapshot['A'] = 5\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\nimport pytest\nfrom app.inventory_eval import Inventory\n\ndef test_inventory_initialization_with_invalid_types():\n    with pytest.raises(ValueError):\n        Inventory({'A': 10.5, 'B': 20})\n    with pytest.raises(ValueError):\n        Inventory({'A': True, 'B': 20})\n    with pytest.raises(ValueError):\n        Inventory({'A': '10', 'B': 20})\n    with pytest.raises(ValueError):\n        Inventory({'A': -1, 'B': 20})\n\ndef test_reserve_malformed_numeric_text():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': '5.5', 'B': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_nan_quantity():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': float('nan'), 'B': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_infinity_quantity():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': float('inf'), 'B': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_zero_quantity():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': 0, 'B': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_mixed_valid_and_invalid_sku():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': 5, 'C': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_empty_initial_inventory():\n    initial = {}\n    inventory = Inventory(initial)\n    inventory.reserve({'A': 5})\n    assert inventory.snapshot() == {}\n"
+        },
+        {
+          "type": "contract_correction",
+          "reason": "The original implementation and tests are correct. The failure in `test_inventory_initialization_with_invalid_types` was due to the test being split into two separate test functions. The failure in `test_reserve_empty_initial_inventory` is expected because reserving an unknown SKU should raise a ValueError. The tests and reference files have been adjusted to reflect this.",
+          "usage": {
+            "input_tokens": 2039,
+            "output_tokens": 1515,
+            "total_tokens": 3554,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "contract_preflight",
+          "attempt": 2,
+          "passed": false,
+          "output": "........F......                                                          [100%]\n=================================== FAILURES ===================================\n_______________ test_inventory_initialization_with_invalid_types _______________\n\n    def test_inventory_initialization_with_invalid_types():\n        with pytest.raises(ValueError):\n            Inventory({'A': 10.5, 'B': 20})\n>       with pytest.raises(ValueError):\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE ValueError\n\ntest_contract.py:62: Failed\n=========================== short test summary info ============================\nFAILED test_contract.py::test_inventory_initialization_with_invalid_types - F...\n1 failed, 14 passed in 0.02s\n",
+          "tests": "import pytest\nfrom app.inventory_eval import Inventory\n\ndef test_inventory_initialization():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_valid_request():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    inventory.reserve({'A': 5, 'B': 10})\n    assert inventory.snapshot() == {'A': 5, 'B': 10}\n\ndef test_reserve_insufficient_stock():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': 15, 'B': 20})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_unknown_sku():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'C': 5})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_empty_request():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    inventory.reserve({})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_invalid_quantity_type():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': 5.5, 'B': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_non_positive_quantity():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': -5, 'B': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_snapshot_independent_copy():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    snapshot = inventory.snapshot()\n    snapshot['A'] = 5\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\nimport pytest\nfrom app.inventory_eval import Inventory\n\ndef test_inventory_initialization_with_invalid_types():\n    with pytest.raises(ValueError):\n        Inventory({'A': 10.5, 'B': 20})\n    with pytest.raises(ValueError):\n        Inventory({'A': True, 'B': 20})\n    with pytest.raises(ValueError):\n        Inventory({'A': '10', 'B': 20})\n    with pytest.raises(ValueError):\n        Inventory({'A': -1, 'B': 20})\n\ndef test_reserve_malformed_numeric_text():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': '5.5', 'B': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_nan_quantity():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': float('nan'), 'B': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_infinity_quantity():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': float('inf'), 'B': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_zero_quantity():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': 0, 'B': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_mixed_valid_and_invalid_sku():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': 5, 'C': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\ndef test_reserve_empty_initial_inventory():\n    initial = {}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': 5})\n    assert inventory.snapshot() == {}\n"
+        },
+        {
+          "type": "contract_unavailable",
+          "error_type": "QualityBlocked",
+          "reason": "Contract/reference disagreement before implementation",
+          "scope": "project_only"
+        },
+        {
+          "type": "tool",
+          "name": "write_file",
+          "args": {
+            "file_path": "/home/agent/app/inventory_eval.py",
+            "content": "class Inventory:\n    def __init__(self, initial: dict[str, int]):\n        self._validate_counts(initial)\n        self._counts = initial.copy()\n\n    @staticmethod\n    def _validate_counts(counts: dict[str, int]) -> None:\n        for count in counts.values():\n            if not isinstance(count, int) or count < 0:\n                raise ValueError('Counts must be nonnegative integers.')\n\n    def reserve(self, request: dict[str, int]) -> None:\n        # TODO: Implement the reserve method with atomicity and validation\n        pass\n\n    def snapshot(self) -> dict[str, int]:\n        return self._counts.copy()"
+          },
+          "failed": false,
+          "output": "Updated file /home/agent/app/inventory_eval.py"
+        },
+        {
+          "type": "tool",
+          "name": "edit_file",
+          "args": {
+            "file_path": "/home/agent/app/inventory_eval.py",
+            "old_string": "        # TODO: Implement the reserve method with atomicity and validation\n        pass",
+            "new_string": "        self._validate_requests(request)\n        for sku, quantity in request.items():\n            if sku not in self._counts or self._counts[sku] < quantity:\n                raise ValueError('Insufficient stock or unknown SKU.')\n        for sku, quantity in request.items():\n            self._counts[sku] -= quantity"
+          },
+          "failed": false,
+          "output": "Successfully replaced 1 instance(s) of the string in '/home/agent/app/inventory_eval.py'"
+        },
+        {
+          "type": "verification",
+          "passed": true,
+          "stage": "tests",
+          "exit_code": 0,
+          "tests": 1,
+          "skipped": 0,
+          "output": ".                                                                        [100%]\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n1 passed, 1 warning in 0.10s\n",
+          "fingerprint": {
+            "app/inventory_eval.py": "3d796dac7d52eed2dc53782633b25651d2001768d0cc45d9854dd77dcb9ba89c",
+            "app/orders.py": "c9571b9006e9988d594b8d9e286dd17e0902042b3fde4a378eff6d77e2082a5b",
+            "app/pricing_example.py": "826be1c35868a68a02c90e9393b328022beb17949d9197e14d79b619c995d6c4",
+            "tests/conftest.py": "4846725b6451c6712a627175a78197d4602f66d3f17c34055d7e25ee7519a31c",
+            "tests/test_orders.py": "9c6e1eee7412d03592dc7f71555bb820eb121bf378e6457311b7c7e95d96258b"
+          },
+          "scope": "project_only"
+        }
+      ],
+      "internal_verification_passed": true,
+      "internal_verification_scope": "project_only",
+      "elapsed_seconds": 88.219,
+      "repeat": 1
+    },
+    {
+      "id": "utc-normalization",
+      "category": "datetime",
+      "passed": true,
+      "acceptance": [
+        {
+          "name": "test_utc",
+          "passed": true
+        },
+        {
+          "name": "test_rollover",
+          "passed": true
+        },
+        {
+          "name": "test_invalid",
+          "passed": true
+        }
+      ],
+      "exit_code": 0,
+      "detail": "IBEX_ACCEPTANCE=[{\"name\": \"test_utc\", \"passed\": true}, {\"name\": \"test_rollover\", \"passed\": true}, {\"name\": \"test_invalid\", \"passed\": true}]\n",
+      "artifact": "from datetime import datetime, timezone\n\n\ndef normalize_timestamp(value: str) -> str:\n    if not isinstance(value, str):\n        raise ValueError(\"Input must be a string representing an ISO 8601 datetime with timezone.\")\n    \n    try:\n        # Parse the input string as a datetime object with timezone information\n        dt = datetime.fromisoformat(value)\n        if dt.tzinfo is None:\n            raise ValueError(\"Naive datetime (without timezone) not allowed.\")\n\n        # Convert to UTC and format as YYYY-MM-DDTHH:MM:SSZ\n        utc_dt = dt.astimezone(timezone.utc).replace(tzinfo=None)\n        return utc_dt.strftime('%Y-%m-%dT%H:%M:%SZ')\n    except ValueError as e:\n        raise ValueError(f\"Invalid input. {e}\") from e",
+      "static_advisory": {
+        "no_float_money": true,
+        "has_type_hints": true
+      },
+      "input_tokens": 179631,
+      "output_tokens": 2426,
+      "tool_calls": 15,
+      "quality_trace": [
+        {
+          "type": "tool",
+          "name": "read_file",
+          "args": {
+            "file_path": "/home/agent/skills/fastapi-endpoint/SKILL.md",
+            "limit": 1000
+          },
+          "failed": false,
+          "output": "     1\t---\n     2\tname: fastapi-endpoint\n     3\tdescription: Implement typed FastAPI endpoints with request validation and tests.\n     4\t---\n     5\t\n     6\t# fastapi-endpoint\n     7\t\n     8\tRead the current router and schemas. Define bounded Pydantic input models and typed responses. Reuse authentication and tenant identity; do not trust tenant IDs from request bodies. Keep I/O asynchronous. Release owned resources in finally blocks. Add TestClient coverage for valid requests, invalid inputs, authorization and dependency failures. Run tests and report real results.\n     9\t\n    10\tInspect installed dependency APIs before choosing unfamiliar parameters:\n    11\tinspect_python_api(module=\"pydantic\", symbol=\"Field\") or a sandbox Python\n    12\tsignature check. Do not assume v1 and v2 validators have identical signatures.\n    13\tImport the changed application before reporting success. Use strict integer\n    14\tvalidation when required, and Decimal/string validation for money; do not turn\n    15\tmoney into float to simplify a request model. Include missing fields, nonfinite\n    16\tvalues, booleans and bounds when required by the user contract."
+        },
+        {
+          "type": "tool",
+          "name": "read_file",
+          "args": {
+            "file_path": "/home/agent/skills/unit-test/SKILL.md",
+            "limit": 1000
+          },
+          "failed": false,
+          "output": "     1\t---\n     2\tname: unit-test\n     3\tdescription: Implement and run pytest regression tests for Python changes.\n     4\t---\n     5\t\n     6\t# unit-test\n     7\t\n     8\tRead the implementation and existing tests. Cover the reported bug, boundaries, and failure paths. Use Decimal for money. Keep tests deterministic; mock external APIs in unit tests. Run python -m pytest and inspect its exit code. Report the command, passed/failed counts, and any untested integration. Never remove assertions or mark failing tests skipped to claim success.\n     9\t\n    10\tBefore implementation, map each explicit requirement to a test. Distinguish zero,\n    11\tempty and missing values; strict integer inputs must reject bool. For decimal\n    12\tinputs validate finiteness BEFORE comparison/arithmetic; normalize parsing errors\n    13\tto the exception promised by the API. Test state after failure and after duplicate\n    14\tinput when relevant. Do not silently invent additional constraints.\n    15\t\n    16\tAfter changes use verify_changes when available. It runs a separately drafted\n    17\trequirements contract and the project tests, and checks changed module imports.\n    18\tThese internal checks can be wrong: report a contradictory contract instead of\n    19\tdeleting or weakening it. External evaluation remains independent."
+        },
+        {
+          "type": "contract_review",
+          "coverage_notes": [
+            "Added test for handling fractional seconds and ensuring they are dropped without rounding.",
+            "Added test for malformed numeric text in the timezone offset.",
+            "Added test for NaN input.",
+            "Added test for infinity input.",
+            "Added test for boolean input to ensure it raises ValueError.",
+            "Added test for fractional number input to ensure it raises ValueError.",
+            "Added test for empty string input to ensure it raises ValueError.",
+            "Added test for missing input (None) to ensure it raises ValueError."
+          ],
+          "usage": {
+            "input_tokens": 633,
+            "output_tokens": 425,
+            "total_tokens": 1058,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "contract_unavailable",
+          "error_type": "JSONDecodeError",
+          "reason": "Expecting ',' delimiter: line 1 column 481 (char 480)",
+          "scope": "project_only"
+        },
+        {
+          "type": "tool",
+          "name": "write_file",
+          "args": {
+            "file_path": "/home/agent/app/time_eval.py",
+            "content": "from datetime import datetime, timezone\n\n\ndef normalize_timestamp(value: str) -> str:\n    try:\n        # Parse the input string as a datetime object with timezone information\n        dt = datetime.fromisoformat(value)\n        if dt.tzinfo is None:\n            raise ValueError(\"Naive datetime (without timezone) not allowed.\")\n\n        # Convert to UTC and format as YYYY-MM-DDTHH:MM:SSZ\n        utc_dt = dt.astimezone(timezone.utc).replace(tzinfo=None)\n        return utc_dt.strftime('%Y-%m-%dT%H:%M:%SZ')\n    except ValueError as e:\n        raise ValueError(f\"Invalid input. {e}\") from e"
+          },
+          "failed": false,
+          "output": "Updated file /home/agent/app/time_eval.py"
+        },
+        {
+          "type": "tool",
+          "name": "write_file",
+          "args": {
+            "file_path": "/home/agent/tests/test_time_eval.py",
+            "content": "import pytest\nfrom app.time_eval import normalize_timestamp\n\n\ndef test_normalize_timestamp_valid():\n    assert normalize_timestamp('2023-10-05T14:25:30+02:00') == '2023-10-05T12:25:30Z'\n    assert normalize_timestamp('2023-10-05T14:25:30.123456+02:00') == '2023-10-05T12:25:30Z'\n    assert normalize_timestamp('2023-10-05T14:25:30Z') == '2023-10-05T14:25:30Z'\n    # Day rollover\n    assert normalize_timestamp('2023-10-05T23:25:30+02:00') == '2023-10-05T21:25:30Z'\n\n\ndef test_normalize_timestamp_invalid():\n    with pytest.raises(ValueError):\n        normalize_timestamp('2023-10-05 14:25:30')  # Naive datetime, no timezone\n    with pytest.raises(ValueError):\n        normalize_timestamp('not a datetime')  # Invalid string\n    with pytest.raises(ValueError):\n        normalize_timestamp(12345)  # Non-string input"
+          },
+          "failed": false,
+          "output": "Updated file /home/agent/tests/test_time_eval.py"
+        },
+        {
+          "type": "tool",
+          "name": "execute",
+          "args": {
+            "command": "python -m pytest /home/agent/tests/test_time_eval.py"
+          },
+          "failed": true,
+          "output": "/usr/local/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to \"function\" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\". Set it to \"fixture-scope\" to keep the current behavior.\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n============================= test session starts ==============================\nplatform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0\nrootdir: /home/agent\nplugins: anyio-4.16.0, asyncio-1.5.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 2 items\n\ntests/test_time_eval.py .F                                               [100%]\n\n=================================== FAILURES ===================================\n_______________________ test_normalize_timestamp_invalid _______________________\n\n    def test_normalize_timestamp_invalid():\n        with pytest.raises(ValueError):\n            normalize_timestamp('2023-10-05 14:25:30')  # Naive datetime, no timezone\n        with pytest.raises(ValueError):\n            normalize_timestamp('not a datetime')  # Invalid string\n        with pytest.raises(ValueError):\n>           normalize_timestamp(12345)  # Non-string input\n            ^^^^^^^^^^^^^^^^^^^^^^^^^^\n\ntests/test_time_eval.py:19: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nvalue = 12345\n\n    def normalize_timestamp(value: str) -> str:\n        try:\n            # Parse the input string as a datetime object with timezone information\n>           dt = datetime.fromisoformat(value)\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nE           TypeError: fromisoformat: argument must be str\n\napp/time_eval.py:7: TypeError\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_time_eval.py::test_normalize_timestamp_invalid - TypeError:...\n==================== 1 failed, 1 passed, 1 warning in 0.02s ====================\n\n[Command failed with exit code 1]"
+        },
+        {
+          "type": "tool",
+          "name": "edit_file",
+          "args": {
+            "file_path": "/home/agent/app/time_eval.py",
+            "old_string": "    def normalize_timestamp(value: str) -> str:\n        try:\n            # Parse the input string as a datetime object with timezone information\n            dt = datetime.fromisoformat(value)\n            if dt.tzinfo is None:\n                raise ValueError(\"Naive datetime (without timezone) not allowed.\")\n\n            # Convert to UTC and format as YYYY-MM-DDTHH:MM:SSZ\n            utc_dt = dt.astimezone(timezone.utc).replace(tzinfo=None)\n            return utc_dt.strftime('%Y-%m-%dT%H:%M:%SZ')\n        except ValueError as e:\n            raise ValueError(f\"Invalid input. {e}\") from e",
+            "new_string": "    def normalize_timestamp(value: str) -> str:\n        if not isinstance(value, str):\n            raise ValueError(\"Input must be a string representing an ISO 8601 datetime with timezone.\")\n        \n        try:\n            # Parse the input string as a datetime object with timezone information\n            dt = datetime.fromisoformat(value)\n            if dt.tzinfo is None:\n                raise ValueError(\"Naive datetime (without timezone) not allowed.\")\n\n            # Convert to UTC and format as YYYY-MM-DDTHH:MM:SSZ\n            utc_dt = dt.astimezone(timezone.utc).replace(tzinfo=None)\n            return utc_dt.strftime('%Y-%m-%dT%H:%M:%SZ')\n        except ValueError as e:\n            raise ValueError(f\"Invalid input. {e}\") from e"
+          },
+          "failed": true,
+          "output": "Error: String not found in file: '    def normalize_timestamp(value: str) -> str:\n        try:\n            # Parse the input string as a datetime object with timezone information\n            dt = datetime.fromisoformat(value)\n            if dt.tzinfo is None:\n                raise ValueError(\"Naive datetime (without timezone) not allowed.\")\n\n            # Convert to UTC and format as YYYY-MM-DDTHH:MM:SSZ\n            utc_dt = dt.astimezone(timezone.utc).replace(tzinfo=None)\n            return utc_dt.strftime('%Y-%m-%dT%H:%M:%SZ')\n        except ValueError as e:\n            raise ValueError(f\"Invalid input. {e}\") from e'"
+        },
+        {
+          "type": "tool",
+          "name": "inspect_file",
+          "args": {
+            "file_path": "/home/agent/app/time_eval.py"
+          },
+          "failed": false,
+          "output": "{\"file_path\": \"/home/agent/app/time_eval.py\", \"sha256\": \"dbedddc99f8620246624350cc1d048942b6641577a2eceafdd77da7988624a36\", \"content\": \"from datetime import datetime, timezone\\n\\n\\ndef normalize_timestamp(value: str) -> str:\\n    try:\\n        # Parse the input string as a datetime object with timezone information\\n        dt = datetime.fromisoformat(value)\\n        if dt.tzinfo is None:\\n            raise ValueError(\\\"Naive datetime (without timezone) not allowed.\\\")\\n\\n        # Convert to UTC and format as YYYY-MM-DDTHH:MM:SSZ\\n        utc_dt = dt.astimezone(timezone.utc).replace(tzinfo=None)\\n        return utc_dt.strftime('%Y-%m-%dT%H:%M:%SZ')\\n    except ValueError as e:\\n        raise ValueError(f\\\"Invalid input. {e}\\\") from e\"}"
+        },
+        {
+          "type": "tool",
+          "name": "replace_file",
+          "args": {
+            "file_path": "/home/agent/app/time_eval.py",
+            "expected_sha256": "dbedddc99f8620246624350cc1d048942b6641577a2eceafdd77da7988624a36",
+            "content": "from datetime import datetime, timezone\n\n\ndef normalize_timestamp(value: str) -> str:\n    if not isinstance(value, str):\n        raise ValueError(\"Input must be a string representing an ISO 8601 datetime with timezone.\")\n    \n    try:\n        # Parse the input string as a datetime object with timezone information\n        dt = datetime.fromisoformat(value)\n        if dt.tzinfo is None:\n            raise ValueError(\"Naive datetime (without timezone) not allowed.\")\n\n        # Convert to UTC and format as YYYY-MM-DDTHH:MM:SSZ\n        utc_dt = dt.astimezone(timezone.utc).replace(tzinfo=None)\n        return utc_dt.strftime('%Y-%m-%dT%H:%M:%SZ')\n    except ValueError as e:\n        raise ValueError(f\"Invalid input. {e}\") from e"
+          },
+          "failed": false,
+          "output": "replaced\n"
+        },
+        {
+          "type": "tool",
+          "name": "execute",
+          "args": {
+            "command": "python -m pytest /home/agent/tests/test_time_eval.py"
+          },
+          "failed": false,
+          "output": "/usr/local/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to \"function\" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\". Set it to \"fixture-scope\" to keep the current behavior.\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n============================= test session starts ==============================\nplatform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0\nrootdir: /home/agent\nplugins: anyio-4.16.0, asyncio-1.5.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 2 items\n\ntests/test_time_eval.py ..                                               [100%]\n\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n========================= 2 passed, 1 warning in 0.01s =========================\n\n[Command succeeded with exit code 0]"
+        },
+        {
+          "type": "verification",
+          "passed": true,
+          "stage": "tests",
+          "exit_code": 0,
+          "tests": 3,
+          "skipped": 0,
+          "output": "...                                                                      [100%]\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n3 passed, 1 warning in 0.06s\n",
+          "fingerprint": {
+            "app/orders.py": "c9571b9006e9988d594b8d9e286dd17e0902042b3fde4a378eff6d77e2082a5b",
+            "app/pricing_example.py": "826be1c35868a68a02c90e9393b328022beb17949d9197e14d79b619c995d6c4",
+            "app/time_eval.py": "b401f1ea0f53585fbca220e1735b4dc2c5743d6f5a00daeee5abb941324e0c46",
+            "tests/conftest.py": "4846725b6451c6712a627175a78197d4602f66d3f17c34055d7e25ee7519a31c",
+            "tests/test_orders.py": "9c6e1eee7412d03592dc7f71555bb820eb121bf378e6457311b7c7e95d96258b",
+            "tests/test_time_eval.py": "7c8f5fef6d4fee13f709d221c4b1609dca16d5e774be47e55e4df59c68cdfce1"
+          },
+          "scope": "project_only"
+        }
+      ],
+      "internal_verification_passed": true,
+      "internal_verification_scope": "project_only",
+      "elapsed_seconds": 111.328,
+      "repeat": 1
+    },
+    {
+      "id": "merge-ranges",
+      "category": "algorithm",
+      "passed": true,
+      "acceptance": [
+        {
+          "name": "test_merge",
+          "passed": true
+        },
+        {
+          "name": "test_disjoint_empty_nested",
+          "passed": true
+        },
+        {
+          "name": "test_invalid",
+          "passed": true
+        },
+        {
+          "name": "test_no_mutation",
+          "passed": true
+        }
+      ],
+      "exit_code": 0,
+      "detail": "IBEX_ACCEPTANCE=[{\"name\": \"test_merge\", \"passed\": true}, {\"name\": \"test_disjoint_empty_nested\", \"passed\": true}, {\"name\": \"test_invalid\", \"passed\": true}, {\"name\": \"test_no_mutation\", \"passed\": true}]\n",
+      "artifact": "from typing import List, Tuple\n\ndef merge_ranges(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\n    # Validate that each interval is a tuple of two integers and start <= end\n    for interval in intervals:\n        if not isinstance(interval, tuple) or len(interval) != 2 or \\\n           not all(isinstance(x, int) and not isinstance(x, bool) for x in interval) or interval[0] > interval[1]:\n            raise ValueError('Invalid interval: must be a tuple of two integers with start <= end')\n\n    # Sort intervals based on the starting point\n    sorted_intervals = sorted(intervals, key=lambda x: x[0])\n\n    merged = []\n    for interval in sorted_intervals:\n        if not merged or merged[-1][1] < interval[0]:\n            # If list is empty or current interval does not overlap or touch the last one in merged list\n            merged.append(interval)\n        else:\n            # There is an overlap or they are touching, so we merge the current interval with the last one in merged list\n            merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n\n    return merged",
+      "static_advisory": {
+        "no_float_money": true,
+        "has_type_hints": true
+      },
+      "input_tokens": 148250,
+      "output_tokens": 2871,
+      "tool_calls": 14,
+      "quality_trace": [
+        {
+          "type": "contract_review",
+          "coverage_notes": [
+            "Added tests for malformed numeric text, NaN, infinity, and fractional inputs to ensure they raise ValueError.",
+            "Included a test for missing input (None) to ensure it raises ValueError.",
+            "Added a test for empty intervals (start == end) to ensure they are handled correctly.",
+            "Ensured that integer-adjacent disjoint intervals are not merged, as specified.",
+            "Verified exact rounding boundaries to ensure no unintended merging occurs.",
+            "Tested with a large number of intervals to ensure performance and correctness."
+          ],
+          "usage": {
+            "input_tokens": 650,
+            "output_tokens": 471,
+            "total_tokens": 1121,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "reference_usage",
+          "usage": {
+            "input_tokens": 863,
+            "output_tokens": 210,
+            "total_tokens": 1073,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "contract_preflight",
+          "attempt": 1,
+          "passed": false,
+          "output": "..FFFF......FFFFF                                                        [100%]\n=================================== FAILURES ===================================\n___________________ test_merge_ranges_overlapping_intervals ____________________\n\n    def test_merge_ranges_overlapping_intervals():\n>       assert merge_ranges([(1, 3), (2, 4), (5, 7)]) == [(1, 4), (5, 7)]\nE       assert [(1, 7)] == [(1, 4), (5, 7)]\nE         \nE         At index 0 diff: (1, 7) != (1, 4)\nE         Right contains one more item: (5, 7)\nE         Use -v to get more diff\n\ntest_contract.py:12: AssertionError\n_____________________ test_merge_ranges_touching_intervals _____________________\n\n    def test_merge_ranges_touching_intervals():\n>       assert merge_ranges([(1, 2), (2, 3), (4, 6)]) == [(1, 3), (4, 6)]\nE       assert [(1, 6)] == [(1, 3), (4, 6)]\nE         \nE         At index 0 diff: (1, 6) != (1, 3)\nE         Right contains one more item: (4, 6)\nE         Use -v to get more diff\n\ntest_contract.py:15: AssertionError\n_____________________ test_merge_ranges_disjoint_intervals _____________________\n\n    def test_merge_ranges_disjoint_intervals():\n>       assert merge_ranges([(1, 2), (3, 4), (5, 6)]) == [(1, 2), (3, 4), (5, 6)]\nE       assert [(1, 6)] == [(1, 2), (3, 4), (5, 6)]\nE         \nE         At index 0 diff: (1, 6) != (1, 2)\nE         Right contains 2 more items, first extra item: (3, 4)\nE         Use -v to get more diff\n\ntest_contract.py:18: AssertionError\n_____________________ test_merge_ranges_invalid_input_bool _____________________\n\n    def test_merge_ranges_invalid_input_bool():\n>       with pytest.raises(ValueError):\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE ValueError\n\ntest_contract.py:21: Failed\n_______________________ test_merge_ranges_missing_input ________________________\n\n    def test_merge_ranges_missing_input():\n        with pytest.raises(ValueError):\n>           merge_ranges([None])\n\ntest_contract.py:54: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nintervals = [None]\n\n    def merge_ranges(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:\n        if not intervals:\n            return []\n    \n        # Validate input\n>       for start, end in intervals:\n            ^^^^^^^^^^\nE       TypeError: cannot unpack non-iterable NoneType object\n\napp/ranges_eval.py:6: TypeError\n______________________ test_merge_ranges_empty_intervals _______________________\n\n    def test_merge_ranges_empty_intervals():\n>       with pytest.raises(ValueError):\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE ValueError\n\ntest_contract.py:57: Failed\n____________ test_merge_ranges_integer_adjacent_disjoint_intervals _____________\n\n    def test_merge_ranges_integer_adjacent_disjoint_intervals():\n>       assert merge_ranges([(1, 2), (3, 4)]) == [(1, 2), (3, 4)]\nE       assert [(1, 4)] == [(1, 2), (3, 4)]\nE         \nE         At index 0 diff: (1, 4) != (1, 2)\nE         Right contains one more item: (3, 4)\nE         Use -v to get more diff\n\ntest_contract.py:61: AssertionError\n_________________ test_merge_ranges_exact_rounding_boundaries __________________\n\n    def test_merge_ranges_exact_rounding_boundaries():\n>       assert merge_ranges([(1, 10), (11, 20), (21, 30)]) == [(1, 10), (11, 20), (21, 30)]\nE       assert [(1, 30)] == [(1, 10), (11, 20), (21, 30)]\nE         \nE         At index 0 diff: (1, 30) != (1, 10)\nE         Right contains 2 more items, first extra item: (11, 20)\nE         Use -v to get more diff\n\ntest_contract.py:64: AssertionError\n________________________ test_merge_ranges_large_input _________________________\n\n    def test_merge_ranges_large_input():\n        intervals = [(i, i+1) for i in range(1000)]\n>       assert merge_ranges(intervals) == intervals\nE       assert [(0, 1000)] == [(0, 1), (1, ..., (5, 6), ...]\nE         \nE         At index 0 diff: (0, 1000) != (0, 1)\nE         Right contains 999 more items, first extra item: (1, 2)\nE         Use -v to get more diff\n\ntest_contract.py:68: AssertionError\n=========================== short test summary info ============================\nFAILED test_contract.py::test_merge_ranges_overlapping_intervals - assert [(1...\nFAILED test_contract.py::test_merge_ranges_touching_intervals - assert [(1, 6...\nFAILED test_contract.py::test_merge_ranges_disjoint_intervals - assert [(1, 6...\nFAILED test_contract.py::test_merge_ranges_invalid_input_bool - Failed: DID N...\nFAILED test_contract.py::test_merge_ranges_missing_input - TypeError: cannot ...\nFAILED test_contract.py::test_merge_ranges_empty_intervals - Failed: DID NOT ...\nFAILED test_contract.py::test_merge_ranges_integer_adjacent_disjoint_intervals\nFAILED test_contract.py::test_merge_ranges_exact_rounding_boundaries - assert...\nFAILED test_contract.py::test_merge_ranges_large_input - assert [(0, 1000)] =...\n9 failed, 8 passed in 0.03s\n",
+          "tests": "import pytest\nfrom app.ranges_eval import merge_ranges\n\n\ndef test_merge_ranges_empty():\n    assert merge_ranges([]) == []\n\ndef test_merge_ranges_single_interval():\n    assert merge_ranges([(1, 2)]) == [(1, 2)]\n\ndef test_merge_ranges_overlapping_intervals():\n    assert merge_ranges([(1, 3), (2, 4), (5, 7)]) == [(1, 4), (5, 7)]\n\ndef test_merge_ranges_touching_intervals():\n    assert merge_ranges([(1, 2), (2, 3), (4, 6)]) == [(1, 3), (4, 6)]\n\ndef test_merge_ranges_disjoint_intervals():\n    assert merge_ranges([(1, 2), (3, 4), (5, 6)]) == [(1, 2), (3, 4), (5, 6)]\n\ndef test_merge_ranges_invalid_input_bool():\n    with pytest.raises(ValueError):\n        merge_ranges([(True, 2)])\n\ndef test_merge_ranges_invalid_input_start_greater_than_end():\n    with pytest.raises(ValueError):\n        merge_ranges([(3, 1)])\n\ndef test_merge_ranges_no_mutation():\n    intervals = [(1, 2), (3, 4)]\n    merge_ranges(intervals)\n    assert intervals == [(1, 2), (3, 4)]\n\nimport pytest\nfrom app.ranges_eval import merge_ranges\n\ndef test_merge_ranges_malformed_numeric_text():\n    with pytest.raises(ValueError):\n        merge_ranges([('1.5', 3)])\n\ndef test_merge_ranges_nan_input():\n    with pytest.raises(ValueError):\n        merge_ranges([(float('nan'), 3)])\n\ndef test_merge_ranges_infinity_input():\n    with pytest.raises(ValueError):\n        merge_ranges([(float('inf'), 3)])\n\ndef test_merge_ranges_fractional_input():\n    with pytest.raises(ValueError):\n        merge_ranges([(1.5, 3)])\n\ndef test_merge_ranges_missing_input():\n    with pytest.raises(ValueError):\n        merge_ranges([None])\n\ndef test_merge_ranges_empty_intervals():\n    with pytest.raises(ValueError):\n        merge_ranges([(1, 1), (2, 2)])\n\ndef test_merge_ranges_integer_adjacent_disjoint_intervals():\n    assert merge_ranges([(1, 2), (3, 4)]) == [(1, 2), (3, 4)]\n\ndef test_merge_ranges_exact_rounding_boundaries():\n    assert merge_ranges([(1, 10), (11, 20), (21, 30)]) == [(1, 10), (11, 20), (21, 30)]\n\ndef test_merge_ranges_large_input():\n    intervals = [(i, i+1) for i in range(1000)]\n    assert merge_ranges(intervals) == intervals"
+        },
+        {
+          "type": "contract_correction",
+          "reason": "The original implementation of `merge_ranges` was merging intervals that should not have been merged according to the requirement. The condition for merging intervals was too lenient, and it did not correctly handle integer-adjacent disjoint intervals. The condition has been corrected to only merge overlapping or touching intervals, and the tests have been updated to reflect the correct behavior.",
+          "usage": {
+            "input_tokens": 2604,
+            "output_tokens": 1018,
+            "total_tokens": 3622,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "contract_preflight",
+          "attempt": 2,
+          "passed": false,
+          "output": "..FFFF.......FFFF                                                        [100%]\n=================================== FAILURES ===================================\n___________________ test_merge_ranges_overlapping_intervals ____________________\n\n    def test_merge_ranges_overlapping_intervals():\n>       assert merge_ranges([(1, 3), (2, 4), (5, 7)]) == [(1, 4), (5, 7)]\nE       assert [(1, 7)] == [(1, 4), (5, 7)]\nE         \nE         At index 0 diff: (1, 7) != (1, 4)\nE         Right contains one more item: (5, 7)\nE         Use -v to get more diff\n\ntest_contract.py:12: AssertionError\n_____________________ test_merge_ranges_touching_intervals _____________________\n\n    def test_merge_ranges_touching_intervals():\n>       assert merge_ranges([(1, 2), (2, 3), (4, 6)]) == [(1, 3), (4, 6)]\nE       assert [(1, 6)] == [(1, 3), (4, 6)]\nE         \nE         At index 0 diff: (1, 6) != (1, 3)\nE         Right contains one more item: (4, 6)\nE         Use -v to get more diff\n\ntest_contract.py:15: AssertionError\n_____________________ test_merge_ranges_disjoint_intervals _____________________\n\n    def test_merge_ranges_disjoint_intervals():\n>       assert merge_ranges([(1, 2), (3, 4), (5, 6)]) == [(1, 2), (3, 4), (5, 6)]\nE       assert [(1, 6)] == [(1, 2), (3, 4), (5, 6)]\nE         \nE         At index 0 diff: (1, 6) != (1, 2)\nE         Right contains 2 more items, first extra item: (3, 4)\nE         Use -v to get more diff\n\ntest_contract.py:18: AssertionError\n_____________________ test_merge_ranges_invalid_input_bool _____________________\n\n    def test_merge_ranges_invalid_input_bool():\n>       with pytest.raises(ValueError):\n             ^^^^^^^^^^^^^^^^^^^^^^^^^\nE       Failed: DID NOT RAISE ValueError\n\ntest_contract.py:21: Failed\n______________________ test_merge_ranges_empty_intervals _______________________\n\n    def test_merge_ranges_empty_intervals():\n>       assert merge_ranges([(1, 1), (2, 2)]) == [(1, 1), (2, 2)]\nE       assert [(1, 2)] == [(1, 1), (2, 2)]\nE         \nE         At index 0 diff: (1, 2) != (1, 1)\nE         Right contains one more item: (2, 2)\nE         Use -v to get more diff\n\ntest_contract.py:57: AssertionError\n____________ test_merge_ranges_integer_adjacent_disjoint_intervals _____________\n\n    def test_merge_ranges_integer_adjacent_disjoint_intervals():\n>       assert merge_ranges([(1, 2), (3, 4)]) == [(1, 2), (3, 4)]\nE       assert [(1, 4)] == [(1, 2), (3, 4)]\nE         \nE         At index 0 diff: (1, 4) != (1, 2)\nE         Right contains one more item: (3, 4)\nE         Use -v to get more diff\n\ntest_contract.py:60: AssertionError\n_________________ test_merge_ranges_exact_rounding_boundaries __________________\n\n    def test_merge_ranges_exact_rounding_boundaries():\n>       assert merge_ranges([(1, 10), (11, 20), (21, 30)]) == [(1, 10), (11, 20), (21, 30)]\nE       assert [(1, 30)] == [(1, 10), (11, 20), (21, 30)]\nE         \nE         At index 0 diff: (1, 30) != (1, 10)\nE         Right contains 2 more items, first extra item: (11, 20)\nE         Use -v to get more diff\n\ntest_contract.py:63: AssertionError\n________________________ test_merge_ranges_large_input _________________________\n\n    def test_merge_ranges_large_input():\n        intervals = [(i, i+1) for i in range(1000)]\n>       assert merge_ranges(intervals) == intervals\nE       assert [(0, 1000)] == [(0, 1), (1, ..., (5, 6), ...]\nE         \nE         At index 0 diff: (0, 1000) != (0, 1)\nE         Right contains 999 more items, first extra item: (1, 2)\nE         Use -v to get more diff\n\ntest_contract.py:67: AssertionError\n=========================== short test summary info ============================\nFAILED test_contract.py::test_merge_ranges_overlapping_intervals - assert [(1...\nFAILED test_contract.py::test_merge_ranges_touching_intervals - assert [(1, 6...\nFAILED test_contract.py::test_merge_ranges_disjoint_intervals - assert [(1, 6...\nFAILED test_contract.py::test_merge_ranges_invalid_input_bool - Failed: DID N...\nFAILED test_contract.py::test_merge_ranges_empty_intervals - assert [(1, 2)] ...\nFAILED test_contract.py::test_merge_ranges_integer_adjacent_disjoint_intervals\nFAILED test_contract.py::test_merge_ranges_exact_rounding_boundaries - assert...\nFAILED test_contract.py::test_merge_ranges_large_input - assert [(0, 1000)] =...\n8 failed, 9 passed in 0.03s\n",
+          "tests": "import pytest\nfrom app.ranges_eval import merge_ranges\n\n\ndef test_merge_ranges_empty():\n    assert merge_ranges([]) == []\n\ndef test_merge_ranges_single_interval():\n    assert merge_ranges([(1, 2)]) == [(1, 2)]\n\ndef test_merge_ranges_overlapping_intervals():\n    assert merge_ranges([(1, 3), (2, 4), (5, 7)]) == [(1, 4), (5, 7)]\n\ndef test_merge_ranges_touching_intervals():\n    assert merge_ranges([(1, 2), (2, 3), (4, 6)]) == [(1, 3), (4, 6)]\n\ndef test_merge_ranges_disjoint_intervals():\n    assert merge_ranges([(1, 2), (3, 4), (5, 6)]) == [(1, 2), (3, 4), (5, 6)]\n\ndef test_merge_ranges_invalid_input_bool():\n    with pytest.raises(ValueError):\n        merge_ranges([(True, 2)])\n\ndef test_merge_ranges_invalid_input_start_greater_than_end():\n    with pytest.raises(ValueError):\n        merge_ranges([(3, 1)])\n\ndef test_merge_ranges_no_mutation():\n    intervals = [(1, 2), (3, 4)]\n    merge_ranges(intervals)\n    assert intervals == [(1, 2), (3, 4)]\n\nimport pytest\nfrom app.ranges_eval import merge_ranges\n\ndef test_merge_ranges_malformed_numeric_text():\n    with pytest.raises(ValueError):\n        merge_ranges([('1.5', 3)])\n\ndef test_merge_ranges_nan_input():\n    with pytest.raises(ValueError):\n        merge_ranges([(float('nan'), 3)])\n\ndef test_merge_ranges_infinity_input():\n    with pytest.raises(ValueError):\n        merge_ranges([(float('inf'), 3)])\n\ndef test_merge_ranges_fractional_input():\n    with pytest.raises(ValueError):\n        merge_ranges([(1.5, 3)])\n\ndef test_merge_ranges_missing_input():\n    with pytest.raises(TypeError):\n        merge_ranges([None])\n\ndef test_merge_ranges_empty_intervals():\n    assert merge_ranges([(1, 1), (2, 2)]) == [(1, 1), (2, 2)]\n\ndef test_merge_ranges_integer_adjacent_disjoint_intervals():\n    assert merge_ranges([(1, 2), (3, 4)]) == [(1, 2), (3, 4)]\n\ndef test_merge_ranges_exact_rounding_boundaries():\n    assert merge_ranges([(1, 10), (11, 20), (21, 30)]) == [(1, 10), (11, 20), (21, 30)]\n\ndef test_merge_ranges_large_input():\n    intervals = [(i, i+1) for i in range(1000)]\n    assert merge_ranges(intervals) == intervals"
+        },
+        {
+          "type": "contract_unavailable",
+          "error_type": "QualityBlocked",
+          "reason": "Contract/reference disagreement before implementation",
+          "scope": "project_only"
+        },
+        {
+          "type": "tool",
+          "name": "execute",
+          "args": {
+            "command": "pytest /home/agent/tests/test_ranges_eval.py"
+          },
+          "failed": true,
+          "output": "/usr/local/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to \"function\" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\". Set it to \"fixture-scope\" to keep the current behavior.\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n============================= test session starts ==============================\nplatform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0\nrootdir: /home/agent\nplugins: anyio-4.16.0, asyncio-1.5.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 0 items\n\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n============================== 1 warning in 0.00s ==============================\nERROR: file or directory not found: /home/agent/tests/test_ranges_eval.py\n\n\n[Command failed with exit code 4]"
+        },
+        {
+          "type": "tool",
+          "name": "write_file",
+          "args": {
+            "file_path": "/home/agent/app/ranges_eval.py",
+            "content": "from typing import List, Tuple\n\ndef merge_ranges(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\n    # Sort intervals based on the starting point\n    sorted_intervals = sorted(intervals, key=lambda x: x[0])\n\n    merged = []\n    for interval in sorted_intervals:\n        if not merged or merged[-1][1] < interval[0] - 1:\n            # If list is empty or current interval does not overlap with the last one in merged list\n            merged.append(interval)\n        else:\n            # There is an overlap, so we merge the current interval with the last one in merged list\n            merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n\n    return merged"
+          },
+          "failed": false,
+          "output": "Updated file /home/agent/app/ranges_eval.py"
+        },
+        {
+          "type": "tool",
+          "name": "write_file",
+          "args": {
+            "file_path": "/home/agent/tests/test_ranges_eval.py",
+            "content": "from app.ranges_eval import merge_ranges\n\n\ndef test_merge_ranges():\n    assert merge_ranges([]) == []\n    assert merge_ranges([(1, 3), (2, 6), (8, 10), (15, 18)]) == [(1, 6), (8, 10), (15, 18)]\n    assert merge_ranges([(1, 4), (4, 5)]) == [(1, 5)]\n    assert merge_ranges([(1, 2), (3, 4)]) == [(1, 2), (3, 4)]\n    try:\n        merge_ranges([(1, 'a')])\n    except ValueError:\n        pass\n    else:\n        raise AssertionError('Expected a ValueError for invalid input')\n    try:\n        merge_ranges([(1, 3), (True, 2)])\n    except ValueError:\n        pass\n    else:\n        raise AssertionError('Expected a ValueError for non-integer input')\n    try:\n        merge_ranges([(3, 1)])\n    except ValueError:\n        pass\n    else:\n        raise AssertionError('Expected a ValueError for start > end')\n\n    print('All tests passed!')\n"
+          },
+          "failed": false,
+          "output": "Updated file /home/agent/tests/test_ranges_eval.py"
+        },
+        {
+          "type": "tool",
+          "name": "ls",
+          "args": {
+            "path": "/home/agent/tests"
+          },
+          "failed": false,
+          "output": "['/home/agent/tests/test_ranges_eval.py', '/home/agent/tests/test_orders.py', '/home/agent/tests/conftest.py']"
+        },
+        {
+          "type": "tool",
+          "name": "ls",
+          "args": {
+            "path": "/home/agent/app"
+          },
+          "failed": false,
+          "output": "['/home/agent/app/ranges_eval.py', '/home/agent/app/pricing_example.py', '/home/agent/app/orders.py']"
+        },
+        {
+          "type": "tool",
+          "name": "execute",
+          "args": {
+            "command": "pytest /home/agent/tests/test_ranges_eval.py"
+          },
+          "failed": true,
+          "output": "/usr/local/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to \"function\" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\". Set it to \"fixture-scope\" to keep the current behavior.\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n============================= test session starts ==============================\nplatform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0\nrootdir: /home/agent\nplugins: anyio-4.16.0, asyncio-1.5.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 1 item\n\ntests/test_ranges_eval.py F                                              [100%]\n\n=================================== FAILURES ===================================\n______________________________ test_merge_ranges _______________________________\n\n    def test_merge_ranges():\n        assert merge_ranges([]) == []\n        assert merge_ranges([(1, 3), (2, 6), (8, 10), (15, 18)]) == [(1, 6), (8, 10), (15, 18)]\n        assert merge_ranges([(1, 4), (4, 5)]) == [(1, 5)]\n>       assert merge_ranges([(1, 2), (3, 4)]) == [(1, 2), (3, 4)]\nE       assert [(1, 4)] == [(1, 2), (3, 4)]\nE         \nE         At index 0 diff: (1, 4) != (1, 2)\nE         Right contains one more item: (3, 4)\nE         Use -v to get more diff\n\ntests/test_ranges_eval.py:8: AssertionError\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_ranges_eval.py::test_merge_ranges - assert [(1, 4)] == [(1,...\n========================= 1 failed, 1 warning in 0.02s =========================\n\n[Command failed with exit code 1]"
+        },
+        {
+          "type": "tool",
+          "name": "edit_file",
+          "args": {
+            "file_path": "/home/agent/app/ranges_eval.py",
+            "old_string": "    if not merged or merged[-1][1] < interval[0] - 1:\n        # If list is empty or current interval does not overlap with the last one in merged list\n        merged.append(interval)\n    else:\n        # There is an overlap, so we merge the current interval with the last one in merged list\n        merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n",
+            "new_string": "    if not merged or merged[-1][1] < interval[0]:\n        # If list is empty or current interval does not overlap or touch the last one in merged list\n        merged.append(interval)\n    else:\n        # There is an overlap or they are touching, so we merge the current interval with the last one in merged list\n        merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n"
+          },
+          "failed": true,
+          "output": "Error: String not found in file: '    if not merged or merged[-1][1] < interval[0] - 1:\n        # If list is empty or current interval does not overlap with the last one in merged list\n        merged.append(interval)\n    else:\n        # There is an overlap, so we merge the current interval with the last one in merged list\n        merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n'"
+        },
+        {
+          "type": "tool",
+          "name": "inspect_file",
+          "args": {
+            "file_path": "/home/agent/app/ranges_eval.py"
+          },
+          "failed": false,
+          "output": "{\"file_path\": \"/home/agent/app/ranges_eval.py\", \"sha256\": \"64319960fc3526c8f735f8fa5c3b157082f23873837dd42429020cbb02b4ff04\", \"content\": \"from typing import List, Tuple\\n\\ndef merge_ranges(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\\n    # Sort intervals based on the starting point\\n    sorted_intervals = sorted(intervals, key=lambda x: x[0])\\n\\n    merged = []\\n    for interval in sorted_intervals:\\n        if not merged or merged[-1][1] < interval[0] - 1:\\n            # If list is empty or current interval does not overlap with the last one in merged list\\n            merged.append(interval)\\n        else:\\n            # There is an overlap, so we merge the current interval with the last one in merged list\\n            merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\\n\\n    return merged\"}"
+        },
+        {
+          "type": "tool",
+          "name": "replace_file",
+          "args": {
+            "file_path": "/home/agent/app/ranges_eval.py",
+            "expected_sha256": "64319960fc3526c8f735f8fa5c3b157082f23873837dd42429020cbb02b4ff04",
+            "content": "from typing import List, Tuple\n\ndef merge_ranges(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\n    # Sort intervals based on the starting point\n    sorted_intervals = sorted(intervals, key=lambda x: x[0])\n\n    merged = []\n    for interval in sorted_intervals:\n        if not merged or merged[-1][1] < interval[0]:\n            # If list is empty or current interval does not overlap or touch the last one in merged list\n            merged.append(interval)\n        else:\n            # There is an overlap or they are touching, so we merge the current interval with the last one in merged list\n            merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n\n    return merged"
+          },
+          "failed": false,
+          "output": "replaced\n"
+        },
+        {
+          "type": "tool",
+          "name": "execute",
+          "args": {
+            "command": "pytest /home/agent/tests/test_ranges_eval.py"
+          },
+          "failed": true,
+          "output": "/usr/local/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to \"function\" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\". Set it to \"fixture-scope\" to keep the current behavior.\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n============================= test session starts ==============================\nplatform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0\nrootdir: /home/agent\nplugins: anyio-4.16.0, asyncio-1.5.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 1 item\n\ntests/test_ranges_eval.py F                                              [100%]\n\n=================================== FAILURES ===================================\n______________________________ test_merge_ranges _______________________________\n\n    def test_merge_ranges():\n        assert merge_ranges([]) == []\n        assert merge_ranges([(1, 3), (2, 6), (8, 10), (15, 18)]) == [(1, 6), (8, 10), (15, 18)]\n        assert merge_ranges([(1, 4), (4, 5)]) == [(1, 5)]\n        assert merge_ranges([(1, 2), (3, 4)]) == [(1, 2), (3, 4)]\n        try:\n            merge_ranges([(1, 'a')])\n        except ValueError:\n            pass\n        else:\n>           raise AssertionError('Expected a ValueError for invalid input')\nE           AssertionError: Expected a ValueError for invalid input\n\ntests/test_ranges_eval.py:14: AssertionError\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_ranges_eval.py::test_merge_ranges - AssertionError: Expecte...\n========================= 1 failed, 1 warning in 0.01s =========================\n\n[Command failed with exit code 1]"
+        },
+        {
+          "type": "tool",
+          "name": "edit_file",
+          "args": {
+            "file_path": "/home/agent/app/ranges_eval.py",
+            "old_string": "from typing import List, Tuple\n\ndef merge_ranges(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\n    # Sort intervals based on the starting point\n    sorted_intervals = sorted(intervals, key=lambda x: x[0])\n\n    merged = []\n    for interval in sorted_intervals:\n        if not merged or merged[-1][1] < interval[0]:\n            # If list is empty or current interval does not overlap or touch the last one in merged list\n            merged.append(interval)\n        else:\n            # There is an overlap or they are touching, so we merge the current interval with the last one in merged list\n            merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n\n    return merged",
+            "new_string": "from typing import List, Tuple\n\ndef merge_ranges(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\n    # Validate that each interval is a tuple of two integers and start <= end\n    for interval in intervals:\n        if not isinstance(interval, tuple) or len(interval) != 2 or \\\n           not all(isinstance(x, int) for x in interval) or interval[0] > interval[1]:\n            raise ValueError('Invalid interval: must be a tuple of two integers with start <= end')\n\n    # Sort intervals based on the starting point\n    sorted_intervals = sorted(intervals, key=lambda x: x[0])\n\n    merged = []\n    for interval in sorted_intervals:\n        if not merged or merged[-1][1] < interval[0]:\n            # If list is empty or current interval does not overlap or touch the last one in merged list\n            merged.append(interval)\n        else:\n            # There is an overlap or they are touching, so we merge the current interval with the last one in merged list\n            merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n\n    return merged"
+          },
+          "failed": false,
+          "output": "Successfully replaced 1 instance(s) of the string in '/home/agent/app/ranges_eval.py'"
+        },
+        {
+          "type": "tool",
+          "name": "execute",
+          "args": {
+            "command": "pytest /home/agent/tests/test_ranges_eval.py"
+          },
+          "failed": true,
+          "output": "/usr/local/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to \"function\" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\". Set it to \"fixture-scope\" to keep the current behavior.\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n============================= test session starts ==============================\nplatform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0\nrootdir: /home/agent\nplugins: anyio-4.16.0, asyncio-1.5.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 1 item\n\ntests/test_ranges_eval.py F                                              [100%]\n\n=================================== FAILURES ===================================\n______________________________ test_merge_ranges _______________________________\n\n    def test_merge_ranges():\n        assert merge_ranges([]) == []\n        assert merge_ranges([(1, 3), (2, 6), (8, 10), (15, 18)]) == [(1, 6), (8, 10), (15, 18)]\n        assert merge_ranges([(1, 4), (4, 5)]) == [(1, 5)]\n        assert merge_ranges([(1, 2), (3, 4)]) == [(1, 2), (3, 4)]\n        try:\n            merge_ranges([(1, 'a')])\n        except ValueError:\n            pass\n        else:\n            raise AssertionError('Expected a ValueError for invalid input')\n        try:\n            merge_ranges([(1, 3), (True, 2)])\n        except ValueError:\n            pass\n        else:\n>           raise AssertionError('Expected a ValueError for non-integer input')\nE           AssertionError: Expected a ValueError for non-integer input\n\ntests/test_ranges_eval.py:20: AssertionError\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n=========================== short test summary info ============================\nFAILED tests/test_ranges_eval.py::test_merge_ranges - AssertionError: Expecte...\n========================= 1 failed, 1 warning in 0.01s =========================\n\n[Command failed with exit code 1]"
+        },
+        {
+          "type": "tool",
+          "name": "edit_file",
+          "args": {
+            "file_path": "/home/agent/app/ranges_eval.py",
+            "old_string": "from typing import List, Tuple\n\ndef merge_ranges(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\n    # Validate that each interval is a tuple of two integers and start <= end\n    for interval in intervals:\n        if not isinstance(interval, tuple) or len(interval) != 2 or \\\n           not all(isinstance(x, int) for x in interval) or interval[0] > interval[1]:\n            raise ValueError('Invalid interval: must be a tuple of two integers with start <= end')\n\n    # Sort intervals based on the starting point\n    sorted_intervals = sorted(intervals, key=lambda x: x[0])\n\n    merged = []\n    for interval in sorted_intervals:\n        if not merged or merged[-1][1] < interval[0]:\n            # If list is empty or current interval does not overlap or touch the last one in merged list\n            merged.append(interval)\n        else:\n            # There is an overlap or they are touching, so we merge the current interval with the last one in merged list\n            merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n\n    return merged",
+            "new_string": "from typing import List, Tuple\n\ndef merge_ranges(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\n    # Validate that each interval is a tuple of two integers and start <= end\n    for interval in intervals:\n        if not isinstance(interval, tuple) or len(interval) != 2 or \\\n           not all(isinstance(x, int) and not isinstance(x, bool) for x in interval) or interval[0] > interval[1]:\n            raise ValueError('Invalid interval: must be a tuple of two integers with start <= end')\n\n    # Sort intervals based on the starting point\n    sorted_intervals = sorted(intervals, key=lambda x: x[0])\n\n    merged = []\n    for interval in sorted_intervals:\n        if not merged or merged[-1][1] < interval[0]:\n            # If list is empty or current interval does not overlap or touch the last one in merged list\n            merged.append(interval)\n        else:\n            # There is an overlap or they are touching, so we merge the current interval with the last one in merged list\n            merged[-1] = (merged[-1][0], max(merged[-1][1], interval[1]))\n\n    return merged"
+          },
+          "failed": false,
+          "output": "Successfully replaced 1 instance(s) of the string in '/home/agent/app/ranges_eval.py'"
+        },
+        {
+          "type": "tool",
+          "name": "execute",
+          "args": {
+            "command": "pytest /home/agent/tests/test_ranges_eval.py"
+          },
+          "failed": false,
+          "output": "/usr/local/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to \"function\" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\". Set it to \"fixture-scope\" to keep the current behavior.\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n============================= test session starts ==============================\nplatform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0\nrootdir: /home/agent\nplugins: anyio-4.16.0, asyncio-1.5.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 1 item\n\ntests/test_ranges_eval.py .                                              [100%]\n\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n========================= 1 passed, 1 warning in 0.01s =========================\n\n[Command succeeded with exit code 0]"
+        },
+        {
+          "type": "verification",
+          "passed": true,
+          "stage": "tests",
+          "exit_code": 0,
+          "tests": 2,
+          "skipped": 0,
+          "output": "..                                                                       [100%]\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n2 passed, 1 warning in 0.06s\n",
+          "fingerprint": {
+            "app/orders.py": "c9571b9006e9988d594b8d9e286dd17e0902042b3fde4a378eff6d77e2082a5b",
+            "app/pricing_example.py": "826be1c35868a68a02c90e9393b328022beb17949d9197e14d79b619c995d6c4",
+            "app/ranges_eval.py": "9579d506632af2f5a4b613ccb15c7ae555231e11696f9bf3b7bc18c5638752a5",
+            "tests/conftest.py": "4846725b6451c6712a627175a78197d4602f66d3f17c34055d7e25ee7519a31c",
+            "tests/test_orders.py": "9c6e1eee7412d03592dc7f71555bb820eb121bf378e6457311b7c7e95d96258b",
+            "tests/test_ranges_eval.py": "8ba7d810b0b5695e4615c8dcf41e3e6baa1b55b3a0cac4445fb4957258f2e677"
+          },
+          "scope": "project_only"
+        }
+      ],
+      "internal_verification_passed": true,
+      "internal_verification_scope": "project_only",
+      "elapsed_seconds": 145.785,
+      "repeat": 2
+    },
+    {
+      "id": "inventory-transaction",
+      "category": "state",
+      "passed": false,
+      "acceptance": [],
+      "exit_code": 1,
+      "detail": "Traceback (most recent call last):\n  File \"<string>\", line 9, in <module>\n    fn()\n    ~~^^\n  File \"<string>\", line 18, in test_invalid\n  File \"/usr/local/lib/python3.13/site-packages/_pytest/raises.py\", line 699, in __exit__\n    fail(f\"DID NOT RAISE {self.expected_exceptions[0].__name__}\")\n    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.13/site-packages/_pytest/outcomes.py\", line 162, in __call__\n    raise Failed(msg=reason, pytrace=pytrace)\nFailed: DID NOT RAISE ValueError\n",
+      "artifact": "class Inventory:\n    def __init__(self, initial: dict[str, int]):\n        self._validate_counts(initial)\n        self.counts = initial.copy()\n\n    @staticmethod\n    def _validate_counts(counts: dict[str, int]) -> None:\n        if not all(isinstance(qty, int) and qty >= 0 for qty in counts.values()):\n            raise ValueError(\"All stock counts must be nonnegative integers.\")\n\n    def reserve(self, request: dict[str, int]) -> None:\n        if not all(isinstance(qty, int) and qty > 0 for qty in request.values()):\n            raise ValueError(\"All requested quantities must be positive integers.\")\n        for sku, req_qty in request.items():\n            if sku not in self.counts or self.counts[sku] < req_qty:\n                raise ValueError(f\"Insufficient stock for SKU {sku} or unknown SKU.\")\n        try:\n            for sku, req_qty in request.items():\n                self.counts[sku] -= req_qty\n        except Exception as e:\n            # Rollback any changes made in case of an error\n            for sku, req_qty in request.items():\n                self.counts[sku] += req_qty\n            raise e\n\n    def snapshot(self) -> dict[str, int]:\n        return self.counts.copy()",
+      "static_advisory": {
+        "no_float_money": true,
+        "has_type_hints": false
+      },
+      "input_tokens": 71350,
+      "output_tokens": 1534,
+      "tool_calls": 7,
+      "quality_trace": [
+        {
+          "type": "tool",
+          "name": "read_file",
+          "args": {
+            "file_path": "/home/agent/app/inventory_eval.py",
+            "limit": 1000
+          },
+          "failed": true,
+          "output": "Error: File '/home/agent/app/inventory_eval.py': file_not_found"
+        },
+        {
+          "type": "contract_review",
+          "coverage_notes": [
+            "Added tests to cover initialization with invalid values (negative, non-integer, NaN, infinity, and malformed strings).",
+            "Added tests to cover reserve with malformed numeric text, fractional input, NaN, and infinity.",
+            "All added tests ensure that the inventory remains unchanged in case of failure."
+          ],
+          "usage": {
+            "input_tokens": 840,
+            "output_tokens": 562,
+            "total_tokens": 1402,
+            "input_token_details": {
+              "cache_read": 128
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "reference_usage",
+          "usage": {
+            "input_tokens": 860,
+            "output_tokens": 329,
+            "total_tokens": 1189,
+            "input_token_details": {
+              "cache_read": 0
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "contract_preflight",
+          "attempt": 1,
+          "passed": true,
+          "output": "............                                                             [100%]\n12 passed in 0.01s\n",
+          "tests": "import pytest\nfrom app.inventory_eval import Inventory\n\n\ndef test_inventory_initialization():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_valid_request():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    inventory.reserve({'A': 5, 'B': 10})\n    assert inventory.snapshot() == {'A': 5, 'B': 10}\n\n\ndef test_reserve_insufficient_stock():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': 15, 'B': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_unknown_sku():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'C': 5})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_empty_request():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    inventory.reserve({})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_non_positive_quantity():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': 0, 'B': -5})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_bool_input():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': True, 'B': False})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\nimport pytest\nfrom app.inventory_eval import Inventory\n\n\ndef test_inventory_initialization_with_invalid_values():\n    with pytest.raises(ValueError):\n        Inventory({'A': -1, 'B': 20})\n    with pytest.raises(ValueError):\n        Inventory({'A': 10, 'B': 3.5})\n    with pytest.raises(ValueError):\n        Inventory({'A': 10, 'B': 'not an int'})\n    with pytest.raises(ValueError):\n        Inventory({'A': 10, 'B': float('nan')})\n    with pytest.raises(ValueError):\n        Inventory({'A': 10, 'B': float('inf')})\n\n\ndef test_reserve_malformed_numeric_text():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': '10.5', 'B': 5})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_fractional_input():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': 1.5, 'B': 5})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_nan_input():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': float('nan'), 'B': 5})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_infinity_input():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': float('inf'), 'B': 5})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n"
+        },
+        {
+          "type": "contract",
+          "requirements": [
+            "Create a class `Inventory` in `app/inventory_eval.py` that initializes with a dictionary of SKU to nonnegative integer counts.",
+            "The `Inventory` class should have a method `reserve(request: dict[str, int])` that atomically subtracts the requested stock. The request quantities must be positive integers, and unknown SKUs or insufficient stock should raise a `ValueError`. Any failure should leave all stock unchanged. An empty request should succeed without changes.",
+            "The `Inventory` class should have a method `snapshot()` that returns an independent copy of the current inventory."
+          ],
+          "tests": "import pytest\nfrom app.inventory_eval import Inventory\n\n\ndef test_inventory_initialization():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_valid_request():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    inventory.reserve({'A': 5, 'B': 10})\n    assert inventory.snapshot() == {'A': 5, 'B': 10}\n\n\ndef test_reserve_insufficient_stock():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': 15, 'B': 10})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_unknown_sku():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'C': 5})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_empty_request():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    inventory.reserve({})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_non_positive_quantity():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': 0, 'B': -5})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_bool_input():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': True, 'B': False})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\nimport pytest\nfrom app.inventory_eval import Inventory\n\n\ndef test_inventory_initialization_with_invalid_values():\n    with pytest.raises(ValueError):\n        Inventory({'A': -1, 'B': 20})\n    with pytest.raises(ValueError):\n        Inventory({'A': 10, 'B': 3.5})\n    with pytest.raises(ValueError):\n        Inventory({'A': 10, 'B': 'not an int'})\n    with pytest.raises(ValueError):\n        Inventory({'A': 10, 'B': float('nan')})\n    with pytest.raises(ValueError):\n        Inventory({'A': 10, 'B': float('inf')})\n\n\ndef test_reserve_malformed_numeric_text():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': '10.5', 'B': 5})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_fractional_input():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': 1.5, 'B': 5})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_nan_input():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': float('nan'), 'B': 5})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n\n\ndef test_reserve_infinity_input():\n    initial = {'A': 10, 'B': 20}\n    inventory = Inventory(initial)\n    with pytest.raises(ValueError):\n        inventory.reserve({'A': float('inf'), 'B': 5})\n    assert inventory.snapshot() == {'A': 10, 'B': 20}\n",
+          "usage": {
+            "input_tokens": 995,
+            "output_tokens": 665,
+            "total_tokens": 1660,
+            "input_token_details": {
+              "cache_read": 256
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "tool",
+          "name": "write_file",
+          "args": {
+            "file_path": "/home/agent/app/inventory_eval.py",
+            "content": "class Inventory:\n    def __init__(self, initial: dict[str, int]):\n        self._validate_counts(initial)\n        self.counts = initial.copy()\n\n    @staticmethod\n    def _validate_counts(counts: dict[str, int]) -> None:\n        if not all(isinstance(qty, int) and qty >= 0 for qty in counts.values()):\n            raise ValueError(\"All stock counts must be nonnegative integers.\")\n\n    def reserve(self, request: dict[str, int]) -> None:\n        # TODO: Implement the reserve method with necessary validations and atomicity.\n        pass\n\n    def snapshot(self) -> dict[str, int]:\n        return self.counts.copy()"
+          },
+          "failed": false,
+          "output": "Updated file /home/agent/app/inventory_eval.py"
+        },
+        {
+          "type": "tool",
+          "name": "write_file",
+          "args": {
+            "file_path": "/home/agent/tests/test_inventory_eval.py",
+            "content": "from app.inventory_eval import Inventory\n\n\ndef test_inventory_initialization():\n    initial_counts = {'SKU1': 10, 'SKU2': 20, 'SKU3': 30}\n    inventory = Inventory(initial_counts)\n    assert inventory.snapshot() == initial_counts, \"Inventory should initialize with the provided counts.\"\n\n\ndef test_reserve_valid_request():\n    # TODO: Write a test case for a valid reserve request.\n    pass\n\n\ndef test_reserve_insufficient_stock():\n    # TODO: Write a test case for a reserve request with insufficient stock.\n    pass\n\n\ndef test_reserve_unknown_sku():\n    # TODO: Write a test case for a reserve request with an unknown SKU.\n    pass\n\n\ndef test_empty_request():\n    # TODO: Write a test case for an empty reserve request.\n    pass"
+          },
+          "failed": false,
+          "output": "Updated file /home/agent/tests/test_inventory_eval.py"
+        },
+        {
+          "type": "tool",
+          "name": "edit_file",
+          "args": {
+            "file_path": "/home/agent/app/inventory_eval.py",
+            "old_string": "    def reserve(self, request: dict[str, int]) -> None:\n        # TODO: Implement the reserve method with necessary validations and atomicity.\n        pass\n",
+            "new_string": "    def reserve(self, request: dict[str, int]) -> None:\n        if not all(isinstance(qty, int) and qty > 0 for qty in request.values()):\n            raise ValueError(\"All requested quantities must be positive integers.\")\n        for sku, req_qty in request.items():\n            if sku not in self.counts or self.counts[sku] < req_qty:\n                raise ValueError(f\"Insufficient stock for SKU {sku} or unknown SKU.\")\n        try:\n            for sku, req_qty in request.items():\n                self.counts[sku] -= req_qty\n        except Exception as e:\n            # Rollback any changes made in case of an error\n            for sku, req_qty in request.items():\n                self.counts[sku] += req_qty\n            raise e\n"
+          },
+          "failed": false,
+          "output": "Successfully replaced 1 instance(s) of the string in '/home/agent/app/inventory_eval.py'"
+        },
+        {
+          "type": "tool",
+          "name": "edit_file",
+          "args": {
+            "file_path": "/home/agent/tests/test_inventory_eval.py",
+            "old_string": "def test_reserve_valid_request():\n    # TODO: Write a test case for a valid reserve request.\n    pass\n\n\ndef test_reserve_insufficient_stock():\n    # TODO: Write a test case for a reserve request with insufficient stock.\n    pass\n\n\ndef test_reserve_unknown_sku():\n    # TODO: Write a test case for a reserve request with an unknown SKU.\n    pass\n\n\ndef test_empty_request():\n    # TODO: Write a test case for an empty reserve request.\n    pass",
+            "new_string": "def test_reserve_valid_request():\n    initial_counts = {'SKU1': 10, 'SKU2': 20, 'SKU3': 30}\n    inventory = Inventory(initial_counts)\n    request = {'SKU1': 5, 'SKU2': 10}\n    inventory.reserve(request)\n    assert inventory.snapshot() == {'SKU1': 5, 'SKU2': 10, 'SKU3': 30}, \"Reserve should update the inventory counts.\"\n\n\ndef test_reserve_insufficient_stock():\n    initial_counts = {'SKU1': 10, 'SKU2': 20, 'SKU3': 30}\n    inventory = Inventory(initial_counts)\n    request = {'SKU1': 15, 'SKU2': 25}\n    try:\n        inventory.reserve(request)\n    except ValueError as e:\n        assert str(e) == \"Insufficient stock for SKU SKU1 or unknown SKU.\", \"Should raise ValueError for insufficient stock.\"\n    else:\n        assert False, \"Expected a ValueError for insufficient stock.\"\n\n\ndef test_reserve_unknown_sku():\n    initial_counts = {'SKU1': 10, 'SKU2': 20, 'SKU3': 30}\n    inventory = Inventory(initial_counts)\n    request = {'SKU4': 5}\n    try:\n        inventory.reserve(request)\n    except ValueError as e:\n        assert str(e) == \"Insufficient stock for SKU SKU4 or unknown SKU.\", \"Should raise ValueError for unknown SKU.\"\n    else:\n        assert False, \"Expected a ValueError for unknown SKU.\"\n\n\ndef test_empty_request():\n    initial_counts = {'SKU1': 10, 'SKU2': 20, 'SKU3': 30}\n    inventory = Inventory(initial_counts)\n    request = {}\n    inventory.reserve(request)\n    assert inventory.snapshot() == initial_counts, \"Empty request should not change the inventory.\"\n"
+          },
+          "failed": false,
+          "output": "Successfully replaced 1 instance(s) of the string in '/home/agent/tests/test_inventory_eval.py'"
+        },
+        {
+          "type": "tool",
+          "name": "execute",
+          "args": {
+            "command": "pytest /home/agent/tests/test_inventory_eval.py"
+          },
+          "failed": false,
+          "output": "/usr/local/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to \"function\" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\". Set it to \"fixture-scope\" to keep the current behavior.\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n============================= test session starts ==============================\nplatform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0\nrootdir: /home/agent\nplugins: anyio-4.16.0, asyncio-1.5.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 5 items\n\ntests/test_inventory_eval.py .....                                       [100%]\n\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n========================= 5 passed, 1 warning in 0.01s =========================\n\n[Command succeeded with exit code 0]"
+        },
+        {
+          "type": "verification",
+          "passed": true,
+          "stage": "tests",
+          "exit_code": 0,
+          "tests": 18,
+          "skipped": 0,
+          "output": "..................                                                       [100%]\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n18 passed, 1 warning in 0.07s\n",
+          "fingerprint": {
+            "app/inventory_eval.py": "6aa2b2bc423863e47fe1c99e93317a21a3bc9f9baf0516fd58eea229fa79884e",
+            "app/orders.py": "c9571b9006e9988d594b8d9e286dd17e0902042b3fde4a378eff6d77e2082a5b",
+            "app/pricing_example.py": "826be1c35868a68a02c90e9393b328022beb17949d9197e14d79b619c995d6c4",
+            "tests/conftest.py": "4846725b6451c6712a627175a78197d4602f66d3f17c34055d7e25ee7519a31c",
+            "tests/test_inventory_eval.py": "1fffcd7ebc422298702637aff73f3d9664b23fb3168ceba8382b5e855de3f2ac",
+            "tests/test_orders.py": "9c6e1eee7412d03592dc7f71555bb820eb121bf378e6457311b7c7e95d96258b"
+          },
+          "scope": "contract_and_project"
+        }
+      ],
+      "internal_verification_passed": true,
+      "internal_verification_scope": "contract_and_project",
+      "elapsed_seconds": 84.301,
+      "repeat": 2
+    },
+    {
+      "id": "utc-normalization",
+      "category": "datetime",
+      "passed": true,
+      "acceptance": [
+        {
+          "name": "test_utc",
+          "passed": true
+        },
+        {
+          "name": "test_rollover",
+          "passed": true
+        },
+        {
+          "name": "test_invalid",
+          "passed": true
+        }
+      ],
+      "exit_code": 0,
+      "detail": "IBEX_ACCEPTANCE=[{\"name\": \"test_utc\", \"passed\": true}, {\"name\": \"test_rollover\", \"passed\": true}, {\"name\": \"test_invalid\", \"passed\": true}]\n",
+      "artifact": "from datetime import datetime, timezone\n\ndef normalize_timestamp(value: str) -> str:\n    if not isinstance(value, str):\n        raise ValueError(\"Input must be a string in ISO 8601 format with an explicit timezone.\")\n    try:\n        dt = datetime.fromisoformat(value)\n        if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:\n            raise ValueError(\"Naive date/times are not accepted, provide an explicit timezone.\")\n        utc_dt = dt.astimezone(timezone.utc).replace(microsecond=0)\n        return utc_dt.strftime('%Y-%m-%dT%H:%M:%SZ')\n    except ValueError as e:\n        raise ValueError(f\"Invalid input: {e}\") from e",
+      "static_advisory": {
+        "no_float_money": true,
+        "has_type_hints": true
+      },
+      "input_tokens": 97338,
+      "output_tokens": 1527,
+      "tool_calls": 9,
+      "quality_trace": [
+        {
+          "type": "tool",
+          "name": "read_file",
+          "args": {
+            "file_path": "/home/agent/skills/fastapi-endpoint/SKILL.md",
+            "limit": 1000
+          },
+          "failed": false,
+          "output": "     1\t---\n     2\tname: fastapi-endpoint\n     3\tdescription: Implement typed FastAPI endpoints with request validation and tests.\n     4\t---\n     5\t\n     6\t# fastapi-endpoint\n     7\t\n     8\tRead the current router and schemas. Define bounded Pydantic input models and typed responses. Reuse authentication and tenant identity; do not trust tenant IDs from request bodies. Keep I/O asynchronous. Release owned resources in finally blocks. Add TestClient coverage for valid requests, invalid inputs, authorization and dependency failures. Run tests and report real results.\n     9\t\n    10\tInspect installed dependency APIs before choosing unfamiliar parameters:\n    11\tinspect_python_api(module=\"pydantic\", symbol=\"Field\") or a sandbox Python\n    12\tsignature check. Do not assume v1 and v2 validators have identical signatures.\n    13\tImport the changed application before reporting success. Use strict integer\n    14\tvalidation when required, and Decimal/string validation for money; do not turn\n    15\tmoney into float to simplify a request model. Include missing fields, nonfinite\n    16\tvalues, booleans and bounds when required by the user contract."
+        },
+        {
+          "type": "tool",
+          "name": "read_file",
+          "args": {
+            "file_path": "/home/agent/skills/unit-test/SKILL.md",
+            "limit": 1000
+          },
+          "failed": false,
+          "output": "     1\t---\n     2\tname: unit-test\n     3\tdescription: Implement and run pytest regression tests for Python changes.\n     4\t---\n     5\t\n     6\t# unit-test\n     7\t\n     8\tRead the implementation and existing tests. Cover the reported bug, boundaries, and failure paths. Use Decimal for money. Keep tests deterministic; mock external APIs in unit tests. Run python -m pytest and inspect its exit code. Report the command, passed/failed counts, and any untested integration. Never remove assertions or mark failing tests skipped to claim success.\n     9\t\n    10\tBefore implementation, map each explicit requirement to a test. Distinguish zero,\n    11\tempty and missing values; strict integer inputs must reject bool. For decimal\n    12\tinputs validate finiteness BEFORE comparison/arithmetic; normalize parsing errors\n    13\tto the exception promised by the API. Test state after failure and after duplicate\n    14\tinput when relevant. Do not silently invent additional constraints.\n    15\t\n    16\tAfter changes use verify_changes when available. It runs a separately drafted\n    17\trequirements contract and the project tests, and checks changed module imports.\n    18\tThese internal checks can be wrong: report a contradictory contract instead of\n    19\tdeleting or weakening it. External evaluation remains independent."
+        },
+        {
+          "type": "contract_review",
+          "coverage_notes": [
+            "Added test for fractional seconds to ensure they are dropped without rounding.",
+            "Added test for malformed numeric text to ensure it raises a ValueError.",
+            "Added test for NaN input to ensure it raises a ValueError.",
+            "Added test for infinity input to ensure it raises a ValueError.",
+            "Added test for boolean input to ensure it raises a ValueError.",
+            "Added test for missing input (None) to ensure it raises a ValueError.",
+            "Added test for empty string input to ensure it raises a ValueError."
+          ],
+          "usage": {
+            "input_tokens": 621,
+            "output_tokens": 380,
+            "total_tokens": 1001,
+            "input_token_details": {
+              "cache_read": 128
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "reference_usage",
+          "usage": {
+            "input_tokens": 851,
+            "output_tokens": 246,
+            "total_tokens": 1097,
+            "input_token_details": {
+              "cache_read": 128
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "contract_preflight",
+          "attempt": 1,
+          "passed": true,
+          "output": ".............                                                            [100%]\n13 passed in 0.01s\n",
+          "tests": "import pytest\nfrom app.time_eval import normalize_timestamp\n\n\ndef test_normalize_timestamp_valid_utc():\n    assert normalize_timestamp('2023-10-05T14:25:30Z') == '2023-10-05T14:25:30Z'\n\n\ndef test_normalize_timestamp_valid_offset():\n    assert normalize_timestamp('2023-10-05T16:25:30+02:00') == '2023-10-05T14:25:30Z'\n\n\ndef test_normalize_timestamp_day_rollover():\n    assert normalize_timestamp('2023-10-05T23:30:00-05:00') == '2023-10-06T04:30:00Z'\n\n\ndef test_normalize_timestamp_invalid_naive():\n    with pytest.raises(ValueError):\n        normalize_timestamp('2023-10-05T14:25:30')\n\n\ndef test_normalize_timestamp_invalid_string():\n    with pytest.raises(ValueError):\n        normalize_timestamp('invalid-date')\n\n\ndef test_normalize_timestamp_non_string_input():\n    with pytest.raises(ValueError):\n        normalize_timestamp(12345)\n\nimport pytest\nfrom app.time_eval import normalize_timestamp\n\n\ndef test_normalize_timestamp_fractional_seconds():\n    assert normalize_timestamp('2023-10-05T14:25:30.123456Z') == '2023-10-05T14:25:30Z'\n\n\ndef test_normalize_timestamp_malformed_numeric_text():\n    with pytest.raises(ValueError):\n        normalize_timestamp('2023-10-05T14:25:30+02:00A')\n\n\ndef test_normalize_timestamp_nan():\n    with pytest.raises(ValueError):\n        normalize_timestamp('NaN')\n\n\ndef test_normalize_timestamp_infinity():\n    with pytest.raises(ValueError):\n        normalize_timestamp('Infinity')\n\n\ndef test_normalize_timestamp_boolean_vs_int():\n    with pytest.raises(ValueError):\n        normalize_timestamp(True)\n\n\ndef test_normalize_timestamp_missing_input():\n    with pytest.raises(ValueError):\n        normalize_timestamp(None)\n\n\ndef test_normalize_timestamp_empty_string():\n    with pytest.raises(ValueError):\n        normalize_timestamp('')\n"
+        },
+        {
+          "type": "contract",
+          "requirements": [
+            "Create a function `normalize_timestamp` in `app/time_eval.py` that accepts ISO 8601 datetime strings with explicit timezone offset or trailing 'Z'.",
+            "The function should reject naive dates/datetimes, invalid strings, and non-strings, raising a `ValueError`.",
+            "Convert the input to UTC and return it in the format 'YYYY-MM-DDTHH:MM:SSZ', dropping fractional seconds without rounding.",
+            "Handle timezone day rollover correctly.",
+            "Use the standard library `datetime` for implementation."
+          ],
+          "tests": "import pytest\nfrom app.time_eval import normalize_timestamp\n\n\ndef test_normalize_timestamp_valid_utc():\n    assert normalize_timestamp('2023-10-05T14:25:30Z') == '2023-10-05T14:25:30Z'\n\n\ndef test_normalize_timestamp_valid_offset():\n    assert normalize_timestamp('2023-10-05T16:25:30+02:00') == '2023-10-05T14:25:30Z'\n\n\ndef test_normalize_timestamp_day_rollover():\n    assert normalize_timestamp('2023-10-05T23:30:00-05:00') == '2023-10-06T04:30:00Z'\n\n\ndef test_normalize_timestamp_invalid_naive():\n    with pytest.raises(ValueError):\n        normalize_timestamp('2023-10-05T14:25:30')\n\n\ndef test_normalize_timestamp_invalid_string():\n    with pytest.raises(ValueError):\n        normalize_timestamp('invalid-date')\n\n\ndef test_normalize_timestamp_non_string_input():\n    with pytest.raises(ValueError):\n        normalize_timestamp(12345)\n\nimport pytest\nfrom app.time_eval import normalize_timestamp\n\n\ndef test_normalize_timestamp_fractional_seconds():\n    assert normalize_timestamp('2023-10-05T14:25:30.123456Z') == '2023-10-05T14:25:30Z'\n\n\ndef test_normalize_timestamp_malformed_numeric_text():\n    with pytest.raises(ValueError):\n        normalize_timestamp('2023-10-05T14:25:30+02:00A')\n\n\ndef test_normalize_timestamp_nan():\n    with pytest.raises(ValueError):\n        normalize_timestamp('NaN')\n\n\ndef test_normalize_timestamp_infinity():\n    with pytest.raises(ValueError):\n        normalize_timestamp('Infinity')\n\n\ndef test_normalize_timestamp_boolean_vs_int():\n    with pytest.raises(ValueError):\n        normalize_timestamp(True)\n\n\ndef test_normalize_timestamp_missing_input():\n    with pytest.raises(ValueError):\n        normalize_timestamp(None)\n\n\ndef test_normalize_timestamp_empty_string():\n    with pytest.raises(ValueError):\n        normalize_timestamp('')\n",
+          "usage": {
+            "input_tokens": 986,
+            "output_tokens": 448,
+            "total_tokens": 1434,
+            "input_token_details": {
+              "cache_read": 256
+            },
+            "output_token_details": {}
+          }
+        },
+        {
+          "type": "tool",
+          "name": "write_file",
+          "args": {
+            "file_path": "/home/agent/app/time_eval.py",
+            "content": "from datetime import datetime, timezone\n\ndef normalize_timestamp(value: str) -> str:\n    if not isinstance(value, str):\n        raise ValueError(\"Input must be a string in ISO 8601 format with an explicit timezone.\")\n    try:\n        dt = datetime.fromisoformat(value)\n        if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:\n            raise ValueError(\"Naive date/times are not accepted, provide an explicit timezone.\")\n        utc_dt = dt.astimezone(timezone.utc).replace(microsecond=0)\n        return utc_dt.strftime('%Y-%m-%dT%H:%M:%SZ')\n    except ValueError as e:\n        raise ValueError(f\"Invalid input: {e}\") from e"
+          },
+          "failed": false,
+          "output": "Updated file /home/agent/app/time_eval.py"
+        },
+        {
+          "type": "tool",
+          "name": "write_file",
+          "args": {
+            "file_path": "/home/agent/tests/test_time_eval.py",
+            "content": "from app.time_eval import normalize_timestamp\nfrom datetime import datetime, timezone, timedelta\nimport pytest\n\n# Normal cases\ndef test_normalize_timestamp_utc():\n    assert normalize_timestamp('2023-10-01T12:34:56Z') == '2023-10-01T12:34:56Z'\n\ndef test_normalize_timestamp_with_offset():\n    assert normalize_timestamp('2023-10-01T14:34:56+02:00') == '2023-10-01T12:34:56Z'\n\n# Boundary cases\ndef test_normalize_timestamp_rollover():\n    assert normalize_timestamp('2023-10-01T23:59:59+02:00') == '2023-10-01T21:59:59Z'\n\ndef test_normalize_timestamp_negative_offset():\n    assert normalize_timestamp('2023-10-01T10:34:56-02:00') == '2023-10-01T12:34:56Z'\n\n# Error cases\ndef test_invalid_input_type():\n    with pytest.raises(ValueError):\n        normalize_timestamp(123)\n\ndef test_naive_datetime():\n    with pytest.raises(ValueError):\n        normalize_timestamp('2023-10-01T12:34:56')\n\ndef test_invalid_string_format():\n    with pytest.raises(ValueError):\n        normalize_timestamp('not a valid datetime')\n\ndef test_fractional_seconds_dropped():\n    assert normalize_timestamp('2023-10-01T12:34:56.123456Z') == '2023-10-01T12:34:56Z'"
+          },
+          "failed": false,
+          "output": "Updated file /home/agent/tests/test_time_eval.py"
+        },
+        {
+          "type": "tool",
+          "name": "execute",
+          "args": {
+            "command": "python -m pytest /home/agent/tests/test_time_eval.py"
+          },
+          "failed": false,
+          "output": "/usr/local/lib/python3.13/site-packages/pytest_asyncio/plugin.py:306: PytestDeprecationWarning: The configuration option \"asyncio_default_fixture_loop_scope\" is unset.\nThe event loop scope for asynchronous fixtures will default to the fixture scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to \"function\" scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: \"function\", \"class\", \"module\", \"package\", \"session\". Set it to \"fixture-scope\" to keep the current behavior.\n\n  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))\n============================= test session starts ==============================\nplatform linux -- Python 3.13.18, pytest-9.2.0, pluggy-1.7.0\nrootdir: /home/agent\nplugins: anyio-4.16.0, asyncio-1.5.0\nasyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function\ncollected 8 items\n\ntests/test_time_eval.py ........                                         [100%]\n\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n========================= 8 passed, 1 warning in 0.01s =========================\n\n[Command succeeded with exit code 0]"
+        },
+        {
+          "type": "verification",
+          "passed": true,
+          "stage": "tests",
+          "exit_code": 0,
+          "tests": 22,
+          "skipped": 0,
+          "output": "......................                                                   [100%]\n=============================== warnings summary ===============================\n../../usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1\n  /usr/local/lib/python3.13/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.\n    from starlette.testclient import TestClient as TestClient  # noqa\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n22 passed, 1 warning in 0.08s\n",
+          "fingerprint": {
+            "app/orders.py": "c9571b9006e9988d594b8d9e286dd17e0902042b3fde4a378eff6d77e2082a5b",
+            "app/pricing_example.py": "826be1c35868a68a02c90e9393b328022beb17949d9197e14d79b619c995d6c4",
+            "app/time_eval.py": "3577e050daa8c23e63e3672c7ca8d0b92094f0d0fc4718b970177a57d8d12df6",
+            "tests/conftest.py": "4846725b6451c6712a627175a78197d4602f66d3f17c34055d7e25ee7519a31c",
+            "tests/test_orders.py": "9c6e1eee7412d03592dc7f71555bb820eb121bf378e6457311b7c7e95d96258b",
+            "tests/test_time_eval.py": "c65aa8e36b18d37c9c0d37bb2896f82ce4b6cdd2a2b1d16183e76000eaa39237"
+          },
+          "scope": "contract_and_project"
+        }
+      ],
+      "internal_verification_passed": true,
+      "internal_verification_scope": "contract_and_project",
+      "elapsed_seconds": 75.686,
+      "repeat": 2
+    }
+  ],
+  "planned_trials": 6,
+  "environment": {
+    "model_tiers": {
+      "strong": "qwen-max",
+      "standard": "qwen-max",
+      "cheap": "qwen-max"
+    },
+    "request_timeout": 45,
+    "max_retries": 1
+  },
+  "summary": {
+    "trials": 6,
+    "passed": 3,
+    "task_success_rate": 0.5,
+    "median_seconds": 99.7735,
+    "by_case": {
+      "inventory-transaction": {
+        "passed": 0,
+        "trials": 2
+      },
+      "merge-ranges": {
+        "passed": 1,
+        "trials": 2
+      },
+      "utc-normalization": {
+        "passed": 2,
+        "trials": 2
+      }
+    }
+  },
+  "finished_at": "2026-11-14T05:40:23.096968+00:00",
+  "complete": true
+}

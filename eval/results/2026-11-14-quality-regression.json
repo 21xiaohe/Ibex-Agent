@@ -1,0 +1,18 @@
+{
+  "source_commit": "7ad7028bb2a8fd9e3fcbbefc4e34bcb2f4c5023b",
+  "agent_source_commit": "30f86762a1281080755821f90c8162ef39cf313f",
+  "windows": {
+    "passed": 143,
+    "warnings": 1,
+    "seconds": 74.12,
+    "local_log": "logs/quality-final-regression-windows.txt"
+  },
+  "linux": {
+    "passed": 143,
+    "warnings": 2,
+    "seconds": 17.52,
+    "local_log": "logs/quality-final-regression-linux.txt"
+  },
+  "uses_real_model": false,
+  "note": "Mechanism/service regression only; not an Agent task success rate."
+}

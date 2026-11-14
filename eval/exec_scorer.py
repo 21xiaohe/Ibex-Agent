@@ -5,37 +5,39 @@
 """
 import ast
 
-from sandbox.docker_manager import create_one_sandbox, seed_project, destroy_sandbox
+from sandbox.lifecycle import release_backend as destroy_sandbox
 
 
-async def score_by_execution(agent, case: dict) -> dict:
-    """让 agent 在沙箱里实现，写入隐藏测试，跑 pytest，按通过情况打分。"""
-    sandbox = await create_one_sandbox()
+async def score_by_execution(agent_factory, case: dict) -> dict:
+    """Evaluate the same sandbox that the newly constructed agent actually edits."""
+    from uuid import uuid4
+    import shlex
+    agent, sandbox = await agent_factory()
+    if sandbox is None:
+        raise ValueError("Execution scoring requires an isolated sandbox")
     try:
-        await seed_project(sandbox)
-        # ① agent 在沙箱里实现
-        await agent.ainvoke(
+        result = await agent.ainvoke(
             {"messages": [{"role": "user", "content": case["issue"]}]},
-            config={"configurable": {"thread_id": f"eval-{case['id']}"}},
+            config={"configurable": {"thread_id": f"eval-{case['id']}-{uuid4().hex}"}, "recursion_limit": 60},
         )
-        # ② 写入隐藏测试（覆盖 agent 可能写的同名测试）
-        sandbox.upload_files([(case["test_file"], case["test_code"].encode("utf-8"))])
-        # ③ 跑 pytest 看通过
-        r = sandbox.execute("cd /home/agent && python -m pytest -q 2>&1 | tail -5")
-        passed = ("passed" in r.output
-                  and "failed" not in r.output and "error" not in r.output.lower())
-        # ④ 静态检查：取回代码验规范（货币没用 float、函数有类型注解）
+        hidden = f"{sandbox.workdir}/.ibex_acceptance/test_acceptance.py"
+        uploaded = await sandbox.aupload_files([(hidden, case["test_code"].encode("utf-8"))])
+        if not uploaded or uploaded[0].error:
+            raise RuntimeError("Hidden test upload failed")
+        checked = await sandbox.aexecute(
+            f"cd {shlex.quote(sandbox.workdir)} && python -m pytest -q tests {shlex.quote(hidden)}", timeout=60,
+        )
         target = case.get("target_file", "")
         code = b""
         if target:
-            dl = sandbox.download_files([f"/home/agent/{target}"])
-            code = dl[0].content if dl and dl[0].content else b""
-        static = _static_checks(code)
+            downloaded = await sandbox.adownload_files([f"{sandbox.workdir}/{target}"])
+            code = downloaded[0].content or b"" if downloaded else b""
         return {
             "id": case["id"], "category": "exec",
-            "score": 1.0 if passed else 0.0,      # 客观：过则 1，不过则 0
-            "static": static,                     # 规范遵守的附加维度
-            "detail": r.output[-200:],
+            "score": float(checked.exit_code == 0 and bool(code)),
+            "static": _static_checks(code), "exit_code": checked.exit_code,
+            "detail": checked.output, "artifact": code.decode("utf-8", errors="replace"),
+            "answer": result["messages"][-1].content,
         }
     finally:
         await destroy_sandbox(sandbox)
@@ -47,6 +49,8 @@ def _static_checks(code: bytes) -> dict:
     简化版：出现 float( 调用就算违规（真实项目要更精细判断是否用于金额，
     比如只在金额相关变量/函数里查；这里粗判，作为示意）。
     """
+    if not code.strip():
+        return {"no_float_money": False, "has_type_hints": False, "missing_code": True}
     out = {"no_float_money": True, "has_type_hints": True}
     try:
         tree = ast.parse(code.decode("utf-8", errors="replace"))
