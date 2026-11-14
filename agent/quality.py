@@ -25,6 +25,7 @@ QUALITY_RULES = """
 改完调用 verify_changes：它运行从原始需求单独生成的契约测试和项目测试。根据真实失败修复，
 不得删测试、跳过断言或削弱校验。测试通过后立即总结，避免无关重构。没有验证成功不得声称完成。
 内部契约测试也可能有误，遇到与需求矛盾时明确报告阻塞；不能修改契约测试制造通过。
+若系统提示自动契约不可用，仍需写并执行项目测试，最终只能报告项目测试的验证范围，不能声称完整需求已验证。
 """
 
 CONTRACT_PROMPT = """You are a requirements-test author, separate from the implementation step.
@@ -132,6 +133,7 @@ class CodingQuality(AgentMiddleware):
         self.tool_count = 0
         self.final_retries = 0
         self.failed_calls: dict[str, int] = {}
+        self.initialized = False
 
     async def abefore_agent(self, state: dict, runtime: Any) -> None:
         """Capture the actual user request, not later verification feedback."""
@@ -156,37 +158,56 @@ print(json.dumps({'files':files,'context':context}))
         return json.loads(result.output)
 
     async def prepare(self) -> None:
-        """Generate a frozen internal test contract before the first potentially mutating tool."""
+        """Reject unreliable generated tests, while preserving mandatory project checks.
+
+        Model/provider outages still propagate. A malformed/disputed generated oracle
+        is not evidence that the user's task is invalid. Record reduced assurance and
+        explicitly disclose it in the final answer instead of forcing contradictory tests.
+        """
         async with self.lock:
             if self.contract is not None:
                 return
-            before = await self.snapshot(include_context=True)
-            self.initial = before["files"]
-            from middleware.concurrency import _llm_sem
+            try:
+                await self._prepare_generated()
+            except (ValueError, QualityBlocked) as error:
+                if not self.initialized:
+                    raise
+                self.contract = {"requires_changes": True, "requirements": [], "tests": "", "scope": "project_only"}
+                self.events.append({"type": "contract_unavailable", "error_type": type(error).__name__,
+                                    "reason": str(error)[:500], "scope": "project_only"})
+
+    async def _prepare_generated(self) -> None:
+        """Generate a frozen internal test contract before the first potentially mutating tool."""
+        if self.contract is not None:
+            return
+        before = await self.snapshot(include_context=True)
+        self.initial = before["files"]
+        self.initialized = True
+        from middleware.concurrency import _llm_sem
+        async with _llm_sem:
+            response = await self.model_factory().ainvoke([
+                {"role": "system", "content": CONTRACT_PROMPT},
+                {"role": "user", "content": json.dumps({"request": self.original, "initial_project": before["context"]}, ensure_ascii=False)}],
+                config={"tags": ["requirements-contract"], "callbacks": []})
+        contract = parse_contract(str(response.content))
+        if contract["requires_changes"]:
             async with _llm_sem:
-                response = await self.model_factory().ainvoke([
-                    {"role": "system", "content": CONTRACT_PROMPT},
-                    {"role": "user", "content": json.dumps({"request": self.original, "initial_project": before["context"]}, ensure_ascii=False)}],
-                    config={"tags": ["requirements-contract"], "callbacks": []})
-            contract = parse_contract(str(response.content))
-            if contract["requires_changes"]:
-                async with _llm_sem:
-                    review = await self.model_factory().ainvoke([
-                        {"role":"system","content":CONTRACT_REVIEW_PROMPT},
-                        {"role":"user","content":json.dumps({"request":self.original,"proposed_tests":contract["tests"]},ensure_ascii=False)}],
-                        config={"tags":["contract-coverage-review"],"callbacks":[]})
-                coverage = parse_generated_json(str(review.content))
-                additional = coverage.get("additional_tests", "")
-                if not isinstance(additional, str):
-                    raise QualityBlocked("Invalid contract coverage review")
-                contract = parse_contract(json.dumps({**contract, "tests": contract["tests"] + "\n" + additional}))
-                self.events.append({"type":"contract_review","coverage_notes":coverage.get("coverage_notes",[]),
-                                    "usage":getattr(review,"usage_metadata",None)})
-            if contract["requires_changes"]:
-                contract = await self.preflight_contract(contract, before["context"])
-            self.contract = contract
-            self.events.append({"type": "contract", "requirements": self.contract["requirements"],
-                                "tests": self.contract["tests"], "usage": getattr(response, "usage_metadata", None)})
+                review = await self.model_factory().ainvoke([
+                    {"role":"system","content":CONTRACT_REVIEW_PROMPT},
+                    {"role":"user","content":json.dumps({"request":self.original,"proposed_tests":contract["tests"]},ensure_ascii=False)}],
+                    config={"tags":["contract-coverage-review"],"callbacks":[]})
+            coverage = parse_generated_json(str(review.content))
+            additional = coverage.get("additional_tests", "")
+            if not isinstance(additional, str):
+                raise QualityBlocked("Invalid contract coverage review")
+            contract = parse_contract(json.dumps({**contract, "tests": contract["tests"] + "\n" + additional}))
+            self.events.append({"type":"contract_review","coverage_notes":coverage.get("coverage_notes",[]),
+                                "usage":getattr(review,"usage_metadata",None)})
+        if contract["requires_changes"]:
+            contract = await self.preflight_contract(contract, before["context"])
+        self.contract = contract
+        self.events.append({"type": "contract", "requirements": self.contract["requirements"],
+                            "tests": self.contract["tests"], "usage": getattr(response, "usage_metadata", None)})
 
     async def preflight_contract(self, contract: dict, context: dict) -> dict:
         """Check generated tests against a spec-only reference before candidate edits."""
@@ -277,8 +298,8 @@ with tempfile.TemporaryDirectory(prefix='ibex-contract-') as directory:
   suites=ET.parse(report).getroot()
   for suite in suites.iter('testsuite'):
    count+=int(suite.get('tests','0'));skipped+=int(suite.get('skipped','0'))
- print(json.dumps({'passed':result.returncode==0 and count>=3 and skipped==0,'stage':'tests','exit_code':result.returncode,'tests':count,'skipped':skipped,'output':(result.stdout+result.stderr)[-14000:]}))
-""".replace("CHANGED", repr(changed)).replace("CONTRACT", repr(self.contract["tests"]))
+ print(json.dumps({'passed':result.returncode==0 and count>=MINIMUM_TESTS and skipped==0,'stage':'tests','exit_code':result.returncode,'tests':count,'skipped':skipped,'output':(result.stdout+result.stderr)[-6000:]}))
+""".replace("CHANGED", repr(changed)).replace("CONTRACT", repr(self.contract["tests"])).replace("MINIMUM_TESTS", "3" if self.contract["tests"] else "1")
         result = await self.backend.aexecute(python_command(source, self.backend.workdir), timeout=75)
         try:
             record = json.loads(result.output.strip().splitlines()[-1])
@@ -286,6 +307,7 @@ with tempfile.TemporaryDirectory(prefix='ibex-contract-') as directory:
             record = {"passed": False, "stage": "verification", "output": result.output[-14000:]}
         record["passed"] = bool(record.get("passed") and result.exit_code == 0)
         record["fingerprint"] = current["files"]
+        record["scope"] = self.contract.get("scope", "contract_and_project")
         self.last_verification = record
         self.events.append({"type": "verification", **record})
         return record
@@ -341,6 +363,9 @@ with tempfile.TemporaryDirectory(prefix='ibex-contract-') as directory:
         if not checked or checked.get("fingerprint") != current["files"]:
             checked = await self.verify()
         if checked["passed"]:
+            if checked.get("scope") == "project_only":
+                note = "\n\n验证范围：项目测试已通过；自动生成的需求契约未通过预检查，未据此验证完整需求，边界行为仍需人工复核。"
+                return {"messages": [last.model_copy(update={"content": str(last.content) + note})]}
             return None
         self.final_retries += 1
         if self.final_retries > 3:

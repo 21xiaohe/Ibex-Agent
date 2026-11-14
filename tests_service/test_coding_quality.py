@@ -113,12 +113,31 @@ def test_dependency_inspection_uses_installed_signature(tmp_path: Path) -> None:
     assert 'finite=' not in result['signature']
 
 
-def test_contract_review_failure_does_not_publish_partial_plan(tmp_path: Path) -> None:
-    """Malformed review data leaves preparation incomplete, preventing fail-open behavior."""
+def test_contract_review_failure_discloses_reduced_scope(tmp_path: Path) -> None:
+    """Malformed generated tests do not become an authoritative requirements oracle."""
     model=NS(ainvoke=AsyncMock(side_effect=[AIMessage(content=json.dumps(CONTRACT)),AIMessage(content='not-json')]))
     quality=CodingQuality(project(tmp_path),lambda:model)
-    with pytest.raises(ValueError): asyncio.run(quality.prepare())
-    assert quality.contract is None
+    asyncio.run(quality.prepare())
+    assert quality.contract['scope']=='project_only'
+    assert quality.contract['tests']==''
+    assert quality.events[-1]['type']=='contract_unavailable'
+
+
+def test_project_only_fallback_still_checks_tests_and_discloses_scope(tmp_path: Path) -> None:
+    """An unreliable generated contract cannot silently turn into full verification."""
+    backend=project(tmp_path)
+    quality=CodingQuality(backend,lambda:None)
+    quality.contract={'requires_changes':True,'tests':'','scope':'project_only'}
+    async def run() -> None:
+        result=await quality.verify()
+        assert result['passed'] and result['scope']=='project_only'
+        final=await quality.aafter_model({'messages':[AIMessage(content='done',id='answer')]},None)
+        assert final['messages'][0].id=='answer'
+        assert '未据此验证完整需求' in final['messages'][0].content
+        (tmp_path/'tests'/'test_basic.py').write_text('def test_seed(): assert False\n')
+        result=await quality.verify()
+        assert not result['passed']
+    asyncio.run(run())
 
 
 def test_bad_oracle_is_blocked_before_candidate_mutation(tmp_path: Path) -> None:

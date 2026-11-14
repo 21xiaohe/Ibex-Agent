@@ -88,6 +88,12 @@ async def run_trial(case: dict, factory: Callable, timeout: float = 300) -> dict
                           tool_calls=sum(len(getattr(m, "tool_calls", []) or []) for m in response.get("messages", [])))
     except Exception as error:
         record.update(error_type=type(error).__name__)
+        body = getattr(error, "body", None)
+        details = body.get("error", body) if isinstance(body, dict) else {}
+        code = details.get("code") if isinstance(details, dict) else None
+        if code in {"Arrearage", "insufficient_quota"}:
+            record["provider_error_code"] = code
+            record["account_blocked"] = True
     finally:
         # Capture diagnostics BEFORE destroying the owned sandbox, even after timeout.
         # This does not change the frozen acceptance command or success criterion.
@@ -101,6 +107,7 @@ async def run_trial(case: dict, factory: Callable, timeout: float = 300) -> dict
         if quality is not None:
             record["quality_trace"] = quality.events
             record["internal_verification_passed"] = bool(quality.last_verification and quality.last_verification.get("passed"))
+            record["internal_verification_scope"] = (quality.last_verification or {}).get("scope")
         try:
             await release_backend(sandbox)
         except Exception as error:
@@ -124,6 +131,7 @@ async def run(args: argparse.Namespace) -> int:
     report: dict = {"suite": SUITE_VERSION, "suite_sha256": suite_hash(), "config": config,
                    "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
                    "started_at": datetime.now(timezone.utc).isoformat(), "samples": []}
+    report["planned_trials"] = len(CASES) * args.repeats
     report["environment"] = {"model_tiers": settings.model_tiers, "request_timeout": settings.timeout,
                              "max_retries": settings.max_retries}
     baseline = json.loads(Path(args.baseline).read_text(encoding="utf-8")) if args.baseline else None
@@ -137,6 +145,11 @@ async def run(args: argparse.Namespace) -> int:
             report["summary"] = summarize(report["samples"])
             output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
             print(json.dumps({k: sample[k] for k in ("id", "repeat", "passed", "elapsed_seconds")}), flush=True)
+            if sample.get("account_blocked"):
+                report.update(complete=False, stop_reason="provider_account_unavailable",
+                              finished_at=datetime.now(timezone.utc).isoformat())
+                output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+                return 2
     report["finished_at"] = datetime.now(timezone.utc).isoformat()
     report["complete"] = True
     if baseline:

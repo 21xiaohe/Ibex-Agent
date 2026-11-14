@@ -81,3 +81,29 @@ def test_failed_trial_saves_artifact_and_trace_before_cleanup(monkeypatch: pytes
     assert result['error_type']=='QualityBlocked' and not result['passed']
     assert result['artifact']=='partial code' and result['quality_trace'][0]['passed'] is False
     assert order==['download','cleanup']
+
+
+def test_account_error_is_classified_without_recording_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep an allowlisted provider code, never the raw HTTP response or secret-bearing text."""
+    from sandbox import lifecycle
+    class AccountError(Exception):
+        body={'code':'Arrearage','message':'sensitive-provider-details'}
+    monkeypatch.setattr(lifecycle,'release_backend',AsyncMock())
+    result=asyncio.run(run_trial(CASES[0],AsyncMock(side_effect=AccountError('private'))))
+    assert result['account_blocked'] and result['provider_error_code']=='Arrearage'
+    assert 'sensitive-provider-details' not in json.dumps(result)
+
+
+def test_account_failure_stops_remaining_paid_trials(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """A persistent account block ends the run as incomplete instead of hammering the API."""
+    from eval import run_objective
+    trial=AsyncMock(return_value={'id':CASES[0]['id'],'passed':False,'elapsed_seconds':1,
+                                 'account_blocked':True,'provider_error_code':'Arrearage'})
+    monkeypatch.setattr(run_objective,'CASES',[CASES[0]])
+    monkeypatch.setattr(run_objective,'run_trial',trial)
+    output=tmp_path/'blocked.json'
+    args=NS(output=str(output),repeats=2,timeout=300,baseline=None,min_success_rate=1)
+    assert asyncio.run(run_objective.run(args))==2
+    data=json.loads(output.read_text(encoding='utf-8'))
+    assert data['complete'] is False and data['planned_trials']==2
+    assert len(data['samples'])==1 and trial.await_count==1
