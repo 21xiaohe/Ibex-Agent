@@ -41,6 +41,12 @@ from infra.logging import get_logger
 
 logger = get_logger()
 
+# execute 的默认超时（秒）。容器本身有 pids-limit 兜底，但一条死循环命令若无超时
+# 会永久占住一个 asyncio.to_thread 工作线程——沙箱池少一个坑位，进程逐渐"线程饿死"。
+# 300s 覆盖正常的编译/测试需求（eval 里跑 pytest 实测 <10s），又能在合理时间内
+# 收割失控命令。退出码 124 与 GNU timeout 工具的约定一致。
+DEFAULT_EXECUTE_TIMEOUT = 300
+
 
 class DockerSandbox(BaseSandbox):
     """在一个加固 Docker 容器里执行命令、传输文件。
@@ -82,24 +88,38 @@ class DockerSandbox(BaseSandbox):
             sh -l 表示以 login shell 启动，会加载 /etc/profile 等环境变量；
             -c 表示后面跟的是要执行的命令字符串。
         timeout : int | None
-            命令超时秒数。超时后 subprocess.run 会抛 TimeoutExpired 异常，
-            防止恶意代码（如死循环）无限占用资源。None 表示不限时。
+            命令超时秒数。None 时取 DEFAULT_EXECUTE_TIMEOUT（300s）——不设默认的话，
+            一条死循环会永久占住 to_thread 工作线程。超时后命令被杀，返回
+            exit_code=124 的正常响应（不裸抛异常），agent 能看到超时信息并自行调整。
 
         返回
         ----
         ExecuteResponse
             - output    : 命令输出文本（stdout + stderr 合并）
-            - exit_code : 进程退出码，0 表示成功
+            - exit_code : 进程退出码，0 表示成功；超时为 124
             - truncated : 输出是否被截断
         """
+        if timeout is None:
+            timeout = DEFAULT_EXECUTE_TIMEOUT
+
         # docker exec -w 指定在容器内哪个目录下执行命令
         # sh -lc 把 command 当作一整条 shell 命令来跑，支持管道、重定向等语法
-        proc = subprocess.run(
-            ["docker", "exec", "-w", self.workdir, self.container_id, "sh", "-lc", command],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,   # 把 stderr 合并到 stdout，简化输出处理
-            timeout=timeout,
-        )
+        try:
+            proc = subprocess.run(
+                ["docker", "exec", "-w", self.workdir, self.container_id, "sh", "-lc", command],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,   # 把 stderr 合并到 stdout，简化输出处理
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as e:
+            # 超时不裸抛 TimeoutExpired：协议消费方（agent 工具层）拿异常只会看到
+            # 一条 traceback，而正常响应能让 agent 读到"超时"事实并决策下一步。
+            # 把已产出的部分输出一并带回去，尽量不浪费已完成的计算。
+            partial = e.stdout if isinstance(e.stdout, bytes) else (e.stdout or "").encode("utf-8", errors="replace")
+            text = partial.decode("utf-8", errors="replace")
+            text = f"{text}\n[ibex] command exceeded timeout={timeout}s, killed (exit 124)"[-8000:]
+            logger.warning("沙箱命令超时被杀：{}（timeout={}s）", self.container_id, timeout)
+            return ExecuteResponse(output=text, exit_code=124, truncated=len(partial) > 8000)
 
         # 解码输出文本，遇到无法解码的字节用 U+FFFD (�) 替换，不会抛异常
         text = proc.stdout.decode("utf-8", errors="replace")

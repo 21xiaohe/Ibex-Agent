@@ -250,11 +250,10 @@ async def seed_project(
         # 会让下游以"空沙箱"继续跑，得出 exec=0.0 这种误导性结果
         raise RuntimeError(f"seed 项目进容器失败（rc={rc}）：{out[-500:]}")
 
-    # 修正文件属主（保险措施：tar 以 agent 用户解包，属主本就正确；
-    # 若镜像默认用户不是 uid=1000，这里兜底改回）
-    # -u 0 : 以 root 身份执行 chown（容器内普通用户没权限改属主）
-    # -R   : 递归修改整个工作目录下所有文件和子目录的属主为 1000:1000
-    await _run(["docker", "exec", "-u", "0", cid, "chown", "-R", "1000:1000", workdir])
+    # 文件属主说明：tar 以容器默认用户（uid=1000）解包，属主天然就是 agent 自己，
+    # 不需要额外 chown。旧版这里有一行 `docker exec -u 0 chown -R 1000:1000`，
+    # 但容器 --cap-drop ALL 后 root 连 CAP_CHOWN 都没有，这行命令其实一直在静默
+    # 失败（_run 不查退出码），纯属"永远失败的保险"——直接删除并在此留档。
 
     logger.info("项目已 seed 进容器 {}（tar 流 {} 字节）", cid, len(buf.getvalue()))
 
@@ -280,11 +279,10 @@ async def destroy_sandbox(sandbox: DockerSandbox) -> None:
 async def create_readonly_sandbox(source_sandbox: DockerSandbox) -> DockerSandbox:
     """给 reviewer 起一个只读容器：把 source_sandbox 的工作目录内容复制进来后设为只读。
 
-    实现：① 起一个新容器；② 从源容器把代码 cp 出来再 cp 进新容器；
+    实现：① 起一个新容器；② 源容器 tar -c 打包 → 新容器 tar -x 解包（管道直通）；
          ③ 在新容器内 chmod -R a-w 工作目录,使 execute 跑 echo>file 也写不进。
     这样 reviewer 即使用 execute 也改不了代码——靠文件系统权限,不靠 prompt。
     """
-    import tempfile
     s = get_settings()
     name = f"syc-ro-{uuid.uuid4().hex[:12]}"
     workdir = s.sandbox_workdir
@@ -302,11 +300,36 @@ async def create_readonly_sandbox(source_sandbox: DockerSandbox) -> DockerSandbo
     if code != 0:
         raise RuntimeError(f"起只读沙箱失败：{out}")
     ro = DockerSandbox(container_id=name, workdir=workdir)
-    # 把源容器代码搬进来(经宿主中转),然后把工作目录设为不可写
-    with tempfile.TemporaryDirectory() as tmpd:
-        await _run(["docker", "cp", f"{source_sandbox.container_id}:{workdir}/.", tmpd])
-        await _run(["docker", "cp", f"{tmpd}/.", f"{name}:{workdir}"])
-    # chmod 去掉写位(用 root 改,因为非 root 改不动自己没权限的位)
-    await _run(["docker", "exec", "-u", "0", name, "chmod", "-R", "a-w", workdir])
+    # 把源容器代码搬进来：源容器 docker exec tar -c 打包 → 新容器 docker exec -i
+    # tar -x 从 stdin 解包。不能用 docker cp：新容器 --read-only，daemon 归档接口
+    # 一律拒绝（"container rootfs is marked read-only"，与 seed_project 同一根因，
+    # 实测 2026-11-17）。
+    # 实现走内存中转而非进程管道直连：Windows Proactor 事件循环不支持把
+    # StreamReader 直接挂到另一个子进程的 stdin（AttributeError），而项目代码
+    # 只有几百 KB，中转无压力——且复用了 seed_project 已验证的 _run_with_stdin 路径。
+    src_proc = await asyncio.create_subprocess_exec(
+        "docker", "exec", source_sandbox.container_id, "tar", "-c", "-C", workdir, ".",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    tar_out, tar_err = await src_proc.communicate()
+    if src_proc.returncode != 0:
+        raise RuntimeError(
+            f"从源沙箱打包代码失败（rc={src_proc.returncode}）："
+            f"{tar_err.decode('utf-8', errors='replace')[-500:]}"
+        )
+    rc, out = await _run_with_stdin(
+        ["docker", "exec", "-i", name, "tar", "-x", "-C", workdir], tar_out)
+    if rc != 0:
+        # 失败必须大声报错——静默成功会让 reviewer 在空沙箱上"审查"，结论全是垃圾
+        raise RuntimeError(f"只读沙箱解包代码失败（rc={rc}）：{out[-500:]}")
+    # chmod 去掉写位，让 execute 跑 echo>file 也写不进。
+    # 注意不能用 root 跑（-u 0）：容器 --cap-drop ALL 后 root 连 CAP_FOWNER 都没有，
+    # 对非自有文件（属主是 uid=1000）chmod 会 EPERM（实测 2026-11-17，旧版静默失败
+    # 导致只读沙箱其实可写）。文件属主本就是 agent 自己，owner 给自己的文件去写位
+    # 不需要任何 capability，以默认用户执行即可。
+    rc, out = await _run(["docker", "exec", name, "chmod", "-R", "a-w", workdir])
+    if rc != 0:
+        raise RuntimeError(f"只读沙箱 chmod 失败（rc={rc}）：{out[-300:]}")
     logger.info("只读 reviewer 沙箱已起：{}", name)
     return ro
