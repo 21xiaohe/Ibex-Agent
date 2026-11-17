@@ -6,7 +6,6 @@ infra/settings.py —— Ibex 的配置中枢
 - 字段前缀 IBEX_（Ibex 缩写），避免与系统其他环境变量撞名
 """
 import os
-from functools import lru_cache
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -35,10 +34,6 @@ class Settings(BaseSettings):
     max_retries: int = 12
     timeout: int = 60
 
-    # ===== 持久化底座 =====
-    postgres_url: str = "postgresql://ibex:ibex@localhost:5432/ibex"
-    redis_url: str = "redis://localhost:6379/0"
-
     # ===== 运行 =====
     log_level: str = "INFO"
 
@@ -50,12 +45,13 @@ class Settings(BaseSettings):
         "cheap": "qwen-turbo",  # 简单任务：读代码、总结
     }
 
-    # Postgres（持久化 + 连接池）
+    # Postgres（持久化 + 连接池）——全项目唯一的 Postgres 连接串字段
+    # （旧版 postgres_url 与此重复定义，消费方 verify_env.py 已并入 database_url）
     database_url: str = "postgresql://ibex:ibex@localhost:5432/ibex"  # 按 compose 改
     pg_pool_min: int = 2
     pg_pool_max: int = 20
 
-    # Redis（备好，后半 arq/限流用）
+    # Redis（备好，后半 arq/限流用）——全项目唯一的 Redis 连接串字段
     redis_url: str = "redis://localhost:6379/0"
     redis_pool_max: int = 20
 
@@ -103,11 +99,12 @@ def _export_langsmith_env(s: "Settings") -> None:
 # ===== 模块级执行：import 这个模块时就把环境变量写好 =====
 # 放模块级（不只在 get_settings 里）是为了保证：任何代码一旦 import infra.settings，
 # LangSmith 变量就立刻进环境，且通常早于 langchain/langgraph 真正使用追踪。
+# 进程只构建这一个 Settings 实例——旧版模块级一份 + lru_cache 再一份，
+# 两次实例化是两个对象，纯属浪费。
 _settings = Settings()
 _export_langsmith_env(_settings)
 
 
-@lru_cache
 def get_settings() -> Settings:
     """全进程单例。业务代码统一通过它拿配置。"""
-    return Settings()
+    return _settings

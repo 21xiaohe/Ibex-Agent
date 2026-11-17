@@ -1,0 +1,30 @@
+# CI：单元测试质量门禁。
+#
+# 只跑 pytest（54 个用例，秒级，不需要 Docker/Postgres/Redis——conftest 用最小
+# app 装配，不依赖真实基础设施）。必需配置 IBEX_API_KEY 在本地由 .env 提供，
+# CI 环境没有 .env，这里注入一个占位值——测试不触碰真实模型，值无所谓。
+#
+# Docker 镜像构建不在 CI 里做：沙箱镜像仅在需要真实 agent/exec 的环境（本地、
+# 部署机）才有意义，构建一次数分钟且产出物不进部署流程，纯属烧 runner 时间。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      IBEX_API_KEY: ci-placeholder-key
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      - name: Run tests
+        run: uv run python -m pytest -q

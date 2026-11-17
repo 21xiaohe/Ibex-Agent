@@ -12,11 +12,11 @@ async def main():
     print("✅ 配置加载成功：")
     print(f"   model    = {s.model_provider}:{s.model_name}")
     print(f"   api_key  = {s.api_key}")              # SecretStr 自动脱敏成 **********
-    print(f"   postgres = {s.postgres_url}")
+    print(f"   postgres = {s.database_url}")
     print(f"   redis    = {s.redis_url}")
 
     # Postgres（异步连接）
-    aconn = await psycopg.AsyncConnection.connect(s.postgres_url)
+    aconn = await psycopg.AsyncConnection.connect(s.database_url)
     async with aconn:
         cur = await aconn.execute("SELECT version();")
         ver = (await cur.fetchone())[0]
