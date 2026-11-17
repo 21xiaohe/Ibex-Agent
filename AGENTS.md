@@ -3,6 +3,9 @@
 ## 项目
 - 技术栈：Python 3.13 + FastAPI；包管理用 uv。
 - 目录：源码在 app/，测试在 tests/，定价逻辑集中在 app/pricing.py。
+  - 现状核对（Ibex 2026-02-13）：仓库里 app/pricing.py 尚不存在，实际只有 app/orders.py、
+    app/discount.py；app/ 也没有 __init__.py（靠命名空间包 + 根目录在 sys.path 上导入）。
+  - tests/test_orders.py 依赖一个 `client` fixture，但项目里没有 conftest.py 提供它。
 
 ## 必须遵守（铁律）
 - 金额一律用 Decimal 计算，**禁止用 float 做货币运算**。
