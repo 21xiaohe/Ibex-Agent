@@ -71,7 +71,7 @@ Ibex 基于 **DeepAgents + LangGraph** 构建，以 **Agent Harness（智能体�
 
 - **Eval 评估**：客观评分（沙箱 pytest 0/1）+ LLM 裁判 + 方差处理（均值±std）
 - **可作 CI 质量门禁**：Eval 退化即拒绝发版
-- **Locust 压测**：分位数延迟分析 + 容量规划
+- **Locust 压测**：`loadtest/locustfile.py`（分位数延迟分析 + 容量规划）。默认压健康检查端点（轻请求测编排链路吞吐）；设 `IBEX_LOAD_ISSUES=1` 可压真实业务端点 `/issues`（每次都是完整 Agent 调用，慎用）。用法见文件头注释
 
 ## 🏗 项目架构
 
@@ -138,7 +138,7 @@ ibex-agent/
 ├── infra/                  # settings / 连接池 / llm_router / 幂等 / fallback
 ├── profiles/               # Harness Profile 注册（多模型路由）
 ├── eval/                   # 评估数据集 + 沙箱执行评分 + LLM 裁判
-├── loadtest/               # Locust 压测
+├── loadtest/               # Locust 压测（locustfile.py，健康检查默认开 / 业务端点需显式开启）
 ├── scripts/                # demo_01 ~ demo_24 分步验证脚本
 ├── app/                    # 内置示例项目（订单微服务，seed 进沙箱供 Agent 操作）
 ├── tests/                  # 示例项目单元测试（Agent 跑测试的靶子）

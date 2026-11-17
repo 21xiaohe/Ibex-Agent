@@ -19,7 +19,9 @@ runtime 参数是隔离级别的旋钮：
 后者由 BaseSandbox 通过 asyncio.to_thread 自动包装成异步）。
 """
 from __future__ import annotations
+import io
 import time
+import tarfile
 from obs.metrics import SANDBOX_CREATE_DURATION
 import asyncio
 import uuid
@@ -63,6 +65,27 @@ async def _run(cmd: list[str]) -> tuple[int, str]:
     # communicate() 等待进程结束并一次性读完输出，避免管道缓冲区满导致死锁
     # 返回的第二个值是 stderr，因为已合并到 stdout 所以为 None
     out, _ = await proc.communicate()
+
+    return (
+        proc.returncode if proc.returncode is not None else -1,
+        out.decode("utf-8", errors="replace"),
+    )
+
+
+async def _run_with_stdin(cmd: list[str], data: bytes) -> tuple[int, str]:
+    """异步执行一条外部命令并把字节流喂进 stdin，返回 (退出码, 合并输出)。
+
+    用途：向 --read-only 容器内灌文件——docker cp 在只读 rootfs 上会被 daemon
+    拒绝（"container rootfs is marked read-only"，实测 2026-11-17），但
+    `docker exec -i` 起的进程有 tmpfs 写权限，tar 流从 stdin 进去即可解包。
+    """
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+    )
+    out, _ = await proc.communicate(data)
 
     return (
         proc.returncode if proc.returncode is not None else -1,
@@ -202,32 +225,38 @@ async def seed_project(
     cid = sandbox.container_id   # 容器 ID / 名称
     workdir = sandbox.workdir    # 容器内工作目录（如 /home/agent）
 
-    # 拷贝子目录
-    # docker cp 会把整个目录递归拷进容器
-    # 例如：docker cp /project/app  syc-sbx-xxxx:/home/agent/app
-    for sub in subdirs:
-        p = root / sub
-        if p.exists():
-            await _run(["docker", "cp", str(p), f"{cid}:{workdir}/{sub}"])
-        # 不存在的目录静默跳过——不是所有项目都有全部子目录
+    # 打 tar 流：把待拷贝的目录/文件打包进内存
+    # **不能用 docker cp**：容器以 --read-only（只读 rootfs）+ tmpfs 启动，
+    # docker cp 走 daemon 归档接口会被拒绝（"container rootfs is marked read-only"），
+    # 且旧实现 _run 不查退出码，失败是静默的——seed 完还打"已 seed"日志，
+    # 导致 eval 的 exec 维度全 0（沙箱里实际什么都没有）。改用 tar 流方案：
+    # 宿主机打 tar → docker exec -i tar -x 从 stdin 解包进 tmpfs。
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tf:
+        for sub in subdirs:
+            p = root / sub
+            if p.exists():
+                tf.add(str(p), arcname=sub)   # arcname=app → 解包出 workdir/app/...
+            # 不存在的目录静默跳过——不是所有项目都有全部子目录
+        for f in extra_files:
+            fp = root / f
+            if fp.is_file():
+                tf.add(str(fp), arcname=f)
 
-    # 拷贝额外单文件
-    # 例如：docker cp /project/AGENTS.md  syc-sbx-xxxx:/home/agent/AGENTS.md
-    for f in extra_files:
-        fp = root / f
-        if fp.is_file():
-            await _run(["docker", "cp", str(fp), f"{cid}:{workdir}/{f}"])
+    rc, out = await _run_with_stdin(
+        ["docker", "exec", "-i", cid, "tar", "-x", "-C", workdir], buf.getvalue())
+    if rc != 0:
+        # 失败必须大声报错——seed 是 agent 工作和 eval 评分的前提，静默成功
+        # 会让下游以"空沙箱"继续跑，得出 exec=0.0 这种误导性结果
+        raise RuntimeError(f"seed 项目进容器失败（rc={rc}）：{out[-500:]}")
 
-    # 修正文件属主
-    # docker cp 拷进来的文件属主默认是 root:root，
-    # 但容器内进程以 uid=1000 运行（见 create_one_sandbox 的 --user 参数），
-    # 如果不 chown，agent 进程将无法修改这些文件（Permission denied）。
-    #
+    # 修正文件属主（保险措施：tar 以 agent 用户解包，属主本就正确；
+    # 若镜像默认用户不是 uid=1000，这里兜底改回）
     # -u 0 : 以 root 身份执行 chown（容器内普通用户没权限改属主）
     # -R   : 递归修改整个工作目录下所有文件和子目录的属主为 1000:1000
     await _run(["docker", "exec", "-u", "0", cid, "chown", "-R", "1000:1000", workdir])
 
-    logger.info("项目已 seed 进容器 {}", cid)
+    logger.info("项目已 seed 进容器 {}（tar 流 {} 字节）", cid, len(buf.getvalue()))
 
 
 # ---------- 核心 API 3：销毁沙箱容器 ----------

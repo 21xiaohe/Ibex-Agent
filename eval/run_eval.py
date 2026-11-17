@@ -30,6 +30,16 @@ async def _llm_judge_scorer(agent, case: dict) -> dict:
     return {"score": v["score"]}
 
 
+async def _exec_scorer(_agent, case: dict) -> dict:
+    """编码题评分适配层：score_by_execution 自建沙箱并绑定专属 agent。
+
+    exec 评分必须让 agent 与沙箱 backend 绑定（否则代码会写到宿主机，
+    沙箱评分恒 0 或被 seed 带出假阳性，2026-11-17 实测踩坑），
+    故不使用这里传入的外部 agent，签名仅为兼容 _eval_repeated。
+    """
+    return await score_by_execution(case)
+
+
 async def _eval_repeated(agent, sem, case, scorer) -> dict:
     """一条用例跑 N 次，报均值 ± 标准差。"""
     scores = []
@@ -50,9 +60,9 @@ async def main():
     sem = asyncio.Semaphore(_CONCURRENCY)
 
     tasks = []
-    # 编码题走客观评分器
+    # 编码题走客观评分器（自建沙箱+绑定 agent，见 _exec_scorer 注释）
     for c in CODE_EVAL_CASES:
-        tasks.append(_eval_repeated(agent, sem, c, score_by_execution))
+        tasks.append(_eval_repeated(None, sem, c, _exec_scorer))
     # 开放题走 LLM 裁判
     for c in EVAL_CASES:
         tasks.append(_eval_repeated(agent, sem, c, _llm_judge_scorer))

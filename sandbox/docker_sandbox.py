@@ -14,8 +14,8 @@
 本类的四个成员通过 docker 命令操作那个容器：
     - id              → 容器名，用于外部识别
     - execute         → docker exec 跑命令
-    - upload_files    → docker cp 把宿主文件拷进容器
-    - download_files  → docker cp 把容器文件拷出来读字节
+    - upload_files    → docker exec cat 写文件（只读 rootfs 下 docker cp 不可用）
+    - download_files  → docker exec cat 读文件（同上）
 
 同步 vs 异步
 -----------
@@ -26,6 +26,7 @@ BaseSandbox 基类会用 asyncio.to_thread 自动把它们包成异步版本（a
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 import tempfile
 
@@ -133,16 +134,18 @@ class DockerSandbox(BaseSandbox):
 
         实现思路
         --------
-        docker cp 只能从宿主机路径拷文件到容器，不能直接传字节流，
-        所以需要先把字节写到宿主机临时文件，再 docker cp 进去。
+        **不能用 docker cp**：沙箱容器以 --read-only（只读 rootfs）+ tmpfs 工作目录
+        启动，docker cp 走 daemon 归档接口，在只读 rootfs 容器上一律报
+        "container rootfs is marked read-only" 失败（实测 2026-11-17）。
+        改用 docker exec 起进程写 tmpfs：mkdir -p 建父目录 + `cat > path` 从 stdin
+        收字节流——exec 的进程有 tmpfs 写权限，完全绕开 rootfs 限制。
         """
         results: list[FileUploadResponse] = []
 
         for path, content in files:
             try:
-                # 第一步：确保容器内目标目录存在
-                # 比如要写 /home/agent/app/utils/helper.py，
-                # 需要先确保 /home/agent/app/utils/ 目录存在
+                # 第一步：确保容器内目标目录存在（exec 以容器默认用户 agent 运行，
+                # /home/agent 是 uid=1000 的 tmpfs，agent 自己有权 mkdir）
                 parent = os.path.dirname(path)
                 if parent:
                     subprocess.run(
@@ -152,23 +155,17 @@ class DockerSandbox(BaseSandbox):
                         check=False,    # 不因 mkdir 失败而抛异常（目录可能已存在）
                     )
 
-                # 第二步：把字节内容写到宿主机的临时文件
-                # docker cp 需要一个宿主机上的文件路径作为源，没法直接传 bytes
-                with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                    tmp.write(content)
-                    tmp_path = tmp.name
-
-                # 第三步：用 docker cp 把临时文件拷进容器的目标路径
+                # 第二步：docker exec -i 起 cat 进程，文件字节从 stdin 喂进去
+                # shlex.quote 防路径里的特殊字符被 shell 解释
                 cp = subprocess.run(
-                    ["docker", "cp", tmp_path, f"{self.container_id}:{path}"],
+                    ["docker", "exec", "-i", self.container_id,
+                     "sh", "-c", f"cat > {shlex.quote(path)}"],
+                    input=content,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.STDOUT,
                 )
 
-                # 第四步：清理宿主机上的临时文件
-                os.unlink(tmp_path)
-
-                # 根据 docker cp 的退出码判断成功/失败
+                # 第三步：按退出码判断成功/失败
                 if cp.returncode == 0:
                     results.append(FileUploadResponse(path=path))
                 else:
@@ -201,44 +198,32 @@ class DockerSandbox(BaseSandbox):
 
         实现思路
         --------
-        与 upload_files 对称：docker cp 只能拷到宿主机路径，
-        所以先 docker cp 到临时文件，再读出字节，最后清理临时文件。
+        与 upload_files 对称：**不用 docker cp**（只读 rootfs 容器上 docker cp
+        会被 daemon 拒绝，见 upload_files 的说明），改用 `docker exec cat` 直接
+        捕获 stdout 拿到文件字节——读取不涉及写 rootfs，exec 通道畅通。
         """
         results: list[FileDownloadResponse] = []
 
         for path in paths:
-            tmp_path = None
             try:
-                # 第一步：创建宿主机临时文件作为 docker cp 的目标
-                with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                    tmp_path = tmp.name
-
-                # 第二步：用 docker cp 把容器内文件拷到宿主机临时文件
+                # docker exec 起 cat 读文件，字节直接从 stdout 拿
                 cp = subprocess.run(
-                    ["docker", "cp", f"{self.container_id}:{path}", tmp_path],
+                    ["docker", "exec", self.container_id, "cat", path],
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.STDOUT,
+                    stderr=subprocess.PIPE,
                 )
 
                 if cp.returncode == 0:
-                    # 第三步：读出临时文件的全部字节内容
-                    with open(tmp_path, "rb") as f:
-                        data = f.read()
-                    results.append(FileDownloadResponse(path=path, content=data))
+                    results.append(FileDownloadResponse(path=path, content=cp.stdout))
                 else:
-                    # docker cp 失败，通常是容器内文件不存在
+                    # exec cat 失败，通常是容器内文件不存在
+                    err = cp.stderr.decode("utf-8", errors="replace") or "file_not_found"
                     results.append(
-                        FileDownloadResponse(path=path, content=None, error="file_not_found")
+                        FileDownloadResponse(path=path, content=None, error=err)
                     )
 
             except Exception as e:  # noqa: BLE001
                 # 协议要求：部分成功，不抛异常
                 results.append(FileDownloadResponse(path=path, content=None, error=str(e)))
-
-            finally:
-                # 无论成功还是失败，都要清理宿主机上的临时文件
-                # finally 保证即使出异常也能执行清理
-                if tmp_path and os.path.exists(tmp_path):
-                    os.unlink(tmp_path)
 
         return results
